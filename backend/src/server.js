@@ -11,7 +11,8 @@ const app = express();
 const __dirname = path.resolve();
 
 const PORT = process.env.PORT;
-console.log(PORT);
+
+app.use(express.json());
 
 app.get('/status', (req, res) => {
   res.send('Hello, World!');
@@ -19,7 +20,6 @@ app.get('/status', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/message', messageRoutes);
-console.log(process.env.NODE_ENV);
 
 //make ready for production
 if (process.env.NODE_ENV === 'production') {
