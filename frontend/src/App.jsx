@@ -6,6 +6,7 @@ import SignUpPage from './pages/SignUpPage.jsx'
 import { useAuthStore } from './store/useAuthStore.js'
 import { useEffect } from 'react'
 import PageLoader from './components/PageLoader.jsx'
+import { Toaster } from 'react-hot-toast'
 
 function App() {
     const { checkAuth, isCheckingAuth, authUser} = useAuthStore();
@@ -28,9 +29,11 @@ function App() {
 
       <Routes>
         <Route path="/" element={ authUser ? <ChatPage /> : <Navigate to={'/login'}/> } />
-        <Route path="/login" element={ !authUser ? <LoginPage /> : <Navigate to={'/chat'}/> } />
-        <Route path="/signup" element={!authUser ? <SignUpPage /> : <Navigate to={'/chat'} /> } />
+        <Route path="/login" element={ !authUser ? <LoginPage /> : <Navigate to={'/'}/> } />
+        <Route path="/signup" element={!authUser ? <SignUpPage /> : <Navigate to={'/'} /> } />
       </Routes>
+
+      <Toaster />
     </div>
   )
 } 
