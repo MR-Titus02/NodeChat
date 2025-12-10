@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import { generateToken } from "../lib/util.js";
+import cloudinary from "../lib/cloudinary.js"
 
 export const signup = async (req, res) => {
     const { fullName, email, password } = req.body;
@@ -80,6 +81,8 @@ export const login = async (req, res) => {
             email: user.email,
             profilePic: user.profilePic,
         });
+
+
     } catch (error) {
         console.error("Error in login controller:",error);
         res.status(500).json({ message: 'Server error' });
@@ -103,7 +106,7 @@ export const updateProfile = async (req, res) => {
  
         const uploadResponse = await cloudinary.uploader.upload(profilePic);
  
-        await User.findByIdAndUpdate(
+        const updatedUser = await User.findByIdAndUpdate(
             userId,
             { profilePic: uploadResponse.secure_url },
             { new: true }

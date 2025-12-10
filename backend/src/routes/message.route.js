@@ -15,7 +15,7 @@ router.get('/inbox', (req, res) => {
 
 // middlewares has to run in this order
 
-router.use( arcjetProtection ,protectRoute);
+router.use( arcjetProtection , protectRoute);
 
 router.get('/contacts',  getAllContacts);
 
