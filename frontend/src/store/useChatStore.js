@@ -6,11 +6,11 @@ export const useChatStore  = create((set, get) => ({
     allContacts: [],
     chats: [],
     messages: [],
-    activeTab: 'chats',
+    activeTab: 'chats ',
     selectedUser: null,
     isUsersLoading: false,
     isMessagesLoading: false,
-
+  
     isSoundEnabled: JSON.parse(localStorage.getItem('isSoundEnabled')) === true,
 
     toggleSound : () => {
@@ -25,7 +25,7 @@ export const useChatStore  = create((set, get) => ({
         set({ isUsersLoading: true });
         try {
             const res = await axiosInstance.get('/messages/contacts');
-            set({ allContacts: res.data})
+            set({ allContacts: res.data.contacts })
         } catch (error) {
             toast.error(error.response.data.message);
         } finally {
@@ -35,8 +35,8 @@ export const useChatStore  = create((set, get) => ({
     getMyChatPartners: async () => {
         set({ isUsersLoading: true });
         try {
-            const res = await axiosInstance.get('/messages/chats ');
-            set({ chats: res.data})
+            const res = await axiosInstance.get('/messages/chats');
+            set({ chats: res.data.chatPartners || [] })
         } catch (error) {
             toast.error(error.response.data.message);
         } finally {
