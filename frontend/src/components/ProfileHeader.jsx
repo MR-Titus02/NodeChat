@@ -1,16 +1,23 @@
 import { useState, useRef } from "react";
-import { LogOutIcon, VolumeOffIcon, Volume2Icon } from "lucide-react";
+import { LogOutIcon, VolumeOffIcon, Volume2Icon, User } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 
 const mouseClickSound = new Audio("/sounds/mouse-click.mp3");
 
 function ProfileHeader() {
-  const { logout, authUser, updateProfile } = useAuthStore();
+  const { logout, authUser, updateProfile, isCheckingAuth } = useAuthStore();
   const { isSoundEnabled, toggleSound } = useChatStore();
+
   const [selectedImg, setSelectedImg] = useState(null);
 
   const fileInputRef = useRef(null);
+  console.log(localStorage.getItem(authUser))
+
+
+
+  // Guard: don't render header until authUser is loaded
+  if (isCheckingAuth || !authUser) return null;
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -23,8 +30,14 @@ function ProfileHeader() {
       const base64Image = reader.result;
       setSelectedImg(base64Image);
       await updateProfile({ profilePic: base64Image });
+      localStorage.setItem(
+        "authUser",
+        JSON.stringify({ ...authUser, profilePic: base64Image})
+      )
     };
   };
+
+  const displayImg = selectedImg ?? authUser?.profilePic ?? "/avatar.png";
 
   return (
     <div className="p-6 border-b border-slate-700/50">
@@ -37,7 +50,7 @@ function ProfileHeader() {
               onClick={() => fileInputRef.current.click()}
             >
               <img
-                src={selectedImg || authUser.profilePic || "/avatar.png"}
+                src={displayImg}
                 alt="User image"
                 className="size-full object-cover"
               />
@@ -58,7 +71,7 @@ function ProfileHeader() {
           {/* USERNAME & ONLINE TEXT */}
           <div>
             <h3 className="text-slate-200 font-medium text-base max-w-[180px] truncate">
-              {authUser.fullName}
+              {authUser?.fullName}
             </h3>
 
             <p className="text-slate-400 text-xs">Online</p>
