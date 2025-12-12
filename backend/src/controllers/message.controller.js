@@ -1,5 +1,6 @@
 import Message from "../models/Message.js";
 import User from "../models/User.js";
+import cloudinary from "../lib/cloudinary.js"
 
 export const getAllContacts = async (req,res) => {
     try {
@@ -21,8 +22,9 @@ export const getAllContacts = async (req,res) => {
 
         const messages = await Message.find({
             $or: [
-                { sender: myId, receiver: userToChatId },
-                { sender: userToChatId, receiver: myId }
+                { senderId: myId, receiverId: userToChatId },
+                { senderId: userToChatId, receiverId: myId }
+
             ]
         })
 
@@ -86,12 +88,13 @@ export const getChatPartners = async (req,res) => {
         const loggedInUserId = req.user._id;
 
         //find all mesages where user is either sender or receiver
-        const messages = await Message.find({
+            const messages = await Message.find({
             $or: [
                 { senderId: loggedInUserId },
                 { receiverId: loggedInUserId }
             ]
-        });
+            });
+
 
         const chatPartnerIds = [
         ...new Set(
