@@ -124,5 +124,40 @@ sendMessage: async (messageData) => {
     toast.error(error.response?.data?.message || "Something went wrong");
   }
 },
-}
-));
+
+  subscribeToMessages: () => {
+    const { selectedUser, isSoundEnabled } = get();
+    if (!selectedUser) return;
+
+    const socket = useAuthStore.getState().socket;
+    if (!socket) {
+      console.log("subscribeToMessages: socket not connected yet");
+      return;
+    }
+
+    // prevent duplicate handlers
+    socket.off("newMessage");
+    socket.on("newMessage", (newMessage) => {
+      console.log("socket newMessage received:", newMessage._id || newMessage);
+      const senderIdStr = String(newMessage.senderId);
+      const selectedIdStr = String(selectedUser._id);
+      const isMessageSentFromSelectedUser = senderIdStr === selectedIdStr;
+      if (!isMessageSentFromSelectedUser) return;
+
+      const currentMessages = get().messages;
+      set({ messages: [...currentMessages, newMessage] });
+
+      if (isSoundEnabled) {
+        const notificationSound = new Audio("/sounds/notification.mp3");
+
+        notificationSound.currentTime = 0; // reset to start
+        notificationSound.play().catch((e) => console.log("Audio play failed:", e));
+      }
+    });
+  },
+
+  unsubscribeFromMessages: () => {
+    const socket = useAuthStore.getState().socket;
+    if (socket) socket.off("newMessage");
+  },
+}));

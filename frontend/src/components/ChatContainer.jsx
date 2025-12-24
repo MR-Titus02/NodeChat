@@ -8,14 +8,18 @@ import MessageInput from './MessageInput';
 import MessagesLoadingSkeleton from './MessagesLoadingSkeleton';
 
 function ChatContainer() {
-const {selectedUser, getMessagesByUserId, messages, isMessagesLoading} = useChatStore();
+const {selectedUser, getMessagesByUserId, messages, isMessagesLoading, subscribeToMessages, unsubscribeFromMessages} = useChatStore();
 const {authUser} = useAuthStore();
 const messageEndRef = useRef(null)
 console.log(useChatStore.getState().messages)
 
 useEffect(() => {
   getMessagesByUserId(selectedUser._id);
-}, [selectedUser, getMessagesByUserId])
+  subscribeToMessages()
+
+  //clean up
+  return () => unsubscribeFromMessages();
+}, [selectedUser, getMessagesByUserId, subscribeToMessages, unsubscribeFromMessages])
 
   useEffect(() => {
     if (messageEndRef.current) {
@@ -33,10 +37,10 @@ useEffect(() => {
 {messages.map(msg => {
   return (
     <div key={msg._id}
-      className={`chat ${msg.senderId === authUser._id ? "chat-end" : "chat-start"}`}
+      className={`chat ${String(msg.senderId) === String(authUser._id) ? "chat-end" : "chat-start"}`}
     >
       <div className={`chat-bubble relative ${
-        msg.senderId === authUser._id
+        String(msg.senderId) === String(authUser._id)
         ? "bg-cyan-600 text-white"
         : "bg-slate-800 text-slate-200"
       }`}>

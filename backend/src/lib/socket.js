@@ -20,6 +20,11 @@ const io = new Server(server, {
 //apply auth middleware to all socket connections
 io.use(socketAuthMiddleware)
 
+//we will use this to check the user is on or not
+export function getReceiverSocketId(userId) {
+    return userSocketMap[userId]
+}
+
 const userSocketMap = {}; // {userId: socketId}
 
 io.on("connection", (socket) => {
