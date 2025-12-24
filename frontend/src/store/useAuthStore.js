@@ -1,22 +1,30 @@
 import { create } from "zustand";
 import { axiosInstance } from "../lib/axios.js";
 import { toast } from "react-hot-toast";
+import { io } from "socket.io-client"
 
-export const useAuthStore = create((set) => ({
+const BASE_URL = import.meta.env.MODE === "development" ? "http://localhost:3000" : "/";
+
+export const useAuthStore = create((set,get) => ({
     // initialize with the user object stored in localStorage (if any)
     authUser: JSON.parse(localStorage.getItem("authUser")) || null,
     isCheckingAuth : true,
     isSigningUp: false,
     isLoggingIn: false,
     isUpdatingProfile: false,
+    socket: null,
+    onlineUsers: [],
 
    checkAuth: async () => {
     try {
       const res = await axiosInstance.get("/auth/check");
       const user = res?.data?.user ?? res?.data ?? null;
       set({ authUser: user });
-      if (user) localStorage.setItem("authUser", JSON.stringify(user));
-      else localStorage.removeItem("authUser");
+      if (user) {
+        localStorage.setItem("authUser", JSON.stringify(user));
+        // ensure socket connects when auth restored (e.g., page reload)
+        get().connectSocket();
+      } else localStorage.removeItem("authUser");
     } catch (error) {
       console.log("Error in authCheck:", error);
       set({ authUser: null });
@@ -34,6 +42,7 @@ export const useAuthStore = create((set) => ({
       set({ authUser: user });
       if (user) localStorage.setItem("authUser", JSON.stringify(user));
       toast.success("Account created successfully!");
+      get().connectSocket();
     } catch (error) {
       toast.error(error.response?.data?.message || "Signup failed");
     } finally {
@@ -50,6 +59,7 @@ export const useAuthStore = create((set) => ({
       set({ authUser: user });
       if (user) localStorage.setItem("authUser", JSON.stringify(user));
       toast.success("Logged in successfully");
+      get().connectSocket();
     } catch (error) {
       toast.error(error.response?.data?.message || "Login failed");
     } finally {
@@ -63,6 +73,7 @@ export const useAuthStore = create((set) => ({
       set({ authUser: null });
       localStorage.removeItem("authUser");
       toast.success("Logged out successfully!");
+      get().disconnectSocket();
     } catch (error) {
       toast.error(error.response?.data?.message || "Logout failed");
       console.log("Logout Error:", error);
@@ -87,5 +98,33 @@ export const useAuthStore = create((set) => ({
       set({ isUpdatingProfile: false });
     }
   },
+
+  connectSocket: () => {
+    const { authUser } = get()
+    if (!authUser || get().socket?.connected) return
+
+    const socket = io(BASE_URL, {
+      withCredentials: true // this ensures cookies are sent
+    })
+
+    socket.connect()
+
+    set({socket})
+
+    // prevent duplicate handlers then listen for online users event
+    socket.off("getOnlineUsers")
+    socket.on("getOnlineUsers", (userIds) => {
+      // normalize IDs to strings for consistent comparisons across components
+      set({onlineUsers: userIds.map(String)})
+    })
+  },
+
+  disconnectSocket: () => {
+    try {
+      if (get().socket) get().socket.disconnect()
+    } finally {
+      set({ socket: null, onlineUsers: [] })
+    }
+  }
   
 }));

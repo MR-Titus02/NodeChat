@@ -6,10 +6,11 @@ import messageRoutes from './routes/message.route.js';
 import { connectDB } from './lib/db.js';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
+import { app, server } from './lib/socket.js';
 
 dotenv.config();
 
-const app = express();
+
 const __dirname = path.resolve();
 
 const PORT = process.env.PORT;
@@ -35,7 +36,7 @@ if (process.env.NODE_ENV === 'production') {
   }
 
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}` );
   connectDB();
 }   );

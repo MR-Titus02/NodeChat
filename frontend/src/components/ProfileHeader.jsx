@@ -37,7 +37,8 @@ function ProfileHeader() {
     };
   };
 
-  const displayImg = selectedImg ?? authUser?.profilePic ?? "/avatar.png";
+const displayImg =
+  selectedImg ?? (authUser?.profilePic && authUser.profilePic.trim() !== "" ? authUser.profilePic : "/avatar.png");
 
   return (
     <div className="p-6 border-b border-slate-700/50">
