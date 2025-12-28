@@ -4,9 +4,13 @@ import { generateToken } from "../lib/util.js";
 import cloudinary from "../lib/cloudinary.js"
 
 export const signup = async (req, res) => {
-    const { fullName, email, password } = req.body;
+    let { fullName, email, password } = req.body;
 
     try {
+
+        if (email) {
+             email = email.toLowerCase().trim();
+        }
         
         if (!fullName || !email || !password) {
             return res.status(400).json({ message: 'All fields are required' });
@@ -21,7 +25,7 @@ export const signup = async (req, res) => {
             return res.status(400).json({ message: 'Invalid email format' });
         }
         
-        const user = await User.findOne({email});
+        const user = await User.findOne({ email });
         if (user) {
             return res.status(400).json({message:"Email already exists"})
         }
@@ -56,9 +60,14 @@ export const signup = async (req, res) => {
 }
 
 export const login = async (req, res) => {
-    const { email , password } = req.body;
+    let { email , password } = req.body;
 
     try {
+
+        if (email) {
+            email = email.toLowerCase().trim();
+        }
+
         if (!email || !password) {
             return res.status(400).json({ message: 'All fields are required' });
         }
