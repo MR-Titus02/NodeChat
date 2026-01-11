@@ -26,10 +26,10 @@ function ChatPage() {
           </div>
         </div>
 
-        {/* ---------------- Chat Container ---------------- */}
+        {/* ---------------- Chat Overlay / Container ---------------- */}
         {selectedUser ? (
           <div
-            className="fixed inset-0 z-50 md:relative md:flex-1 md:bg-slate-900/50 flex flex-col bg-slate-900/95 transition-transform transform"
+            className="fixed inset-0 z-50 md:relative md:flex-1 flex flex-col bg-slate-900/95 md:bg-slate-900/50"
           >
             <ChatContainer />
           </div>
