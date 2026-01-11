@@ -92,35 +92,57 @@ export const sendMessage = async (req,res) => {
     }
 }
 
-export const getChatPartners = async (req,res) => {
-    try {
-        const loggedInUserId = req.user._id;
+export const getChatPartners = async (req, res) => {
+  try {
+    const loggedInUserId = req.user._id;
 
-        //find all mesages where user is either sender or receiver
-            const messages = await Message.find({
-            $or: [
-                { senderId: loggedInUserId },
-                { receiverId: loggedInUserId }
-            ]
-            });
+    // Find all messages where user is either sender or receiver
+    const messages = await Message.find({
+      $or: [
+        { senderId: loggedInUserId },
+        { receiverId: loggedInUserId }
+      ]
+    }).sort({ createdAt: -1 }); // sort descending to get last message first
 
+    // Get unique chat partner IDs
+    const chatPartnerIds = [
+      ...new Set(
+        messages.map((msg) =>
+          msg.senderId.toString() === loggedInUserId.toString()
+            ? msg.receiverId.toString()
+            : msg.senderId.toString()
+        )
+      )
+    ];
 
-        const chatPartnerIds = [
-        ...new Set(
-        messages.map((msg) => 
-            msg.senderId.toString() === loggedInUserId.toString()
-                ? msg.receiverId.toString() 
-                : msg.senderId.toString()
-            )
-        ),
-        ];
+    // Fetch chat partners from users collection
+    const chatPartners = await User.find({ _id: { $in: chatPartnerIds } }).select('-password');
 
-        const chatPartners = await User.find({ _id: { $in: chatPartnerIds } }).select('-password');
-        res.status(200).json({ chatPartners });
+    // Map last message to each partner
+    const chatPartnersWithLastMessage = chatPartners.map((partner) => {
+      // find the latest message between logged in user and this partner
+      const lastMessage = messages.find(
+        (msg) =>
+          (msg.senderId.toString() === partner._id.toString() &&
+           msg.receiverId.toString() === loggedInUserId.toString()) ||
+          (msg.senderId.toString() === loggedInUserId.toString() &&
+           msg.receiverId.toString() === partner._id.toString())
+      );
 
-    } catch (error) {
-        console.log("Error in getChatPartners:", error.message);
-        res.status(500).json({ message: "Server error", error });
-    }
+      return {
+        ...partner.toObject(),
+        lastMessage: lastMessage ? {
+          text: lastMessage.text,
+          image: lastMessage.image || null,
+          createdAt: lastMessage.createdAt
+        } : null
+      };
+    });
 
-}
+    res.status(200).json({ chats: chatPartnersWithLastMessage });
+
+  } catch (error) {
+    console.log("Error in getChatPartners:", error.message);
+    res.status(500).json({ message: "Server error", error });
+  }
+};

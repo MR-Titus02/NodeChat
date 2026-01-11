@@ -60,13 +60,11 @@ export const signup = async (req, res) => {
 }
 
 export const login = async (req, res) => {
+
     let { email , password } = req.body;
+    console.log("Login body:", req.body);
 
     try {
-
-        if (email) {
-            email = email.toLowerCase().trim();
-        }
 
         if (!email || !password) {
             return res.status(400).json({ message: 'All fields are required' });
