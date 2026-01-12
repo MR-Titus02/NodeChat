@@ -12,7 +12,7 @@ function ChatPage() {
   const { activeTab, selectedUser } = useChatStore();
 
   return (
-    <div className="relative w-full h-screen max-w-6xl mx-auto">
+    <div className="relative w-full h-[100dvh] max-w-5xl mx-auto px-2 md:px-6 lg:px-8 py-4 md:py-6 lg:py-8">
       <BorderAnimationContainer className="flex h-full">
         {/* ---------------- Sidebar (Left) ---------------- */}
         <div
@@ -27,14 +27,15 @@ function ChatPage() {
         </div>
 
         {/* ---------------- Chat Overlay / Container ---------------- */}
-        {selectedUser ? (
-          <div
-            className="fixed inset-0 z-50 md:relative md:flex-1 flex flex-col bg-slate-900/95 md:bg-slate-900/50"
-          >
+        {selectedUser && (
+          <div className="fixed inset-0 z-50 md:relative md:flex-1 flex flex-col bg-slate-900/95 md:bg-slate-900/50 p-2 md:p-0 sm:rounded-none md:rounded-2xl md:overflow-hidden">
             <ChatContainer />
           </div>
-        ) : (
-          <div className="flex-1 flex flex-col bg-slate-900/50 backdrop-blur-sm">
+        )}
+
+        {/* Desktop-only placeholder */}
+        {!selectedUser && (
+          <div className="hidden md:flex flex-1 flex-col bg-slate-900/50 backdrop-blur-sm">
             <NoConversationPlaceholder />
           </div>
         )}
