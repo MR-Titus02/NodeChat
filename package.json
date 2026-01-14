@@ -2,10 +2,10 @@
   "name": "app",
   "version": "1.0.0",
   "main": "index.js",
-"scripts": {
-  "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
-  "start": "npm run start --prefix backend"
-},
+  "scripts": {
+    "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
+    "start": "npm run start --prefix backend"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/MR-Titus02/NodeChat.git"
@@ -17,5 +17,8 @@
     "url": "https://github.com/MR-Titus02/NodeChat/issues"
   },
   "homepage": "https://github.com/MR-Titus02/NodeChat#readme",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "axios": "^1.13.2"
+  }
 }
