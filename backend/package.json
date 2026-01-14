@@ -14,6 +14,7 @@
     "@arcjet/inspect": "^1.0.0-beta.10",
     "@arcjet/node": "^1.0.0-beta.10",
     "app": "file:..",
+    "axios": "^1.13.2",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.8.0",
     "cookie-parser": "^1.4.7",
