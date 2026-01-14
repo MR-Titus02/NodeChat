@@ -15,40 +15,33 @@ function ChatContainer() {
     subscribeToMessages,
     unsubscribeFromMessages,
   } = useChatStore();
+
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
 
-  // Load messages & subscribe to real-time
   useEffect(() => {
+    if (!selectedUser) return;
     getMessagesByUserId(selectedUser._id);
     subscribeToMessages();
     return () => unsubscribeFromMessages();
   }, [
-    selectedUser,
     getMessagesByUserId,
+    selectedUser,
     subscribeToMessages,
     unsubscribeFromMessages,
   ]);
 
-  // Scroll to latest message
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      messageEndRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "end",
-      });
-    }, 100);
-
-    return () => clearTimeout(timeout);
+    messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   return (
-    <div className="flex flex-col h-[100dvh]">
-      {/* Chat Header with single close button */}
+    // 👇 CRITICAL: min-h-0
+    <div className="flex flex-col h-full min-h-0">
       <ChatHeader />
 
-      {/* Messages scroll area */}
-      <div className="flex-1 px-4 md:px-6 py-6 md:py-10 overflow-y-auto">
+      {/* Messages area */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 py-4">
         {isMessagesLoading ? (
           <MessagesLoadingSkeleton />
         ) : messages.length > 0 ? (
@@ -63,7 +56,7 @@ function ChatContainer() {
                 }`}
               >
                 <div
-                  className={`chat-bubble relative ${
+                  className={`chat-bubble ${
                     String(msg.senderId) === String(authUser._id)
                       ? "bg-cyan-600 text-white"
                       : "bg-slate-800 text-slate-200"
@@ -76,12 +69,6 @@ function ChatContainer() {
                     />
                   )}
                   {msg.text && <p className="mt-2">{msg.text}</p>}
-                  <p className="text-xs mt-1 opacity-75">
-                    {new Date(msg.createdAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
                 </div>
               </div>
             ))}
@@ -92,8 +79,10 @@ function ChatContainer() {
         )}
       </div>
 
-      {/* Message input always sticks to bottom */}
-      <MessageInput />
+      {/* 👇 MUST NOT shrink */}
+      <div className="flex-shrink-0">
+        <MessageInput />
+      </div>
     </div>
   );
 }

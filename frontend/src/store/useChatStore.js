@@ -21,109 +21,105 @@ export const useChatStore = create((set, get) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSelectedUser: (selectedUser) => set({ selectedUser }),
 
-getAllContacts: async () => {
-  set({ isUsersLoading: true });
-  try {
-    const res = await axiosInstance.get("/messages/contacts");
-    const data = res.data;
+  getAllContacts: async () => {
+    set({ isUsersLoading: true });
+    try {
+      const res = await axiosInstance.get("/messages/contacts");
+      const data = res.data;
 
-    const contactsArray =
-      data?.contacts ??
-      data?.users ??
-      data?.data ??
-      (Array.isArray(data) ? data : []);
+      const contactsArray =
+        data?.contacts ??
+        data?.users ??
+        data?.data ??
+        (Array.isArray(data) ? data : []);
 
-    set({ allContacts: contactsArray });
-  } catch (error) {
-    toast.error(error.response?.data?.message || "Failed to load contacts");
-  } finally {
-    set({ isUsersLoading: false });
-  }
-},
+      set({ allContacts: contactsArray });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load contacts");
+    } finally {
+      set({ isUsersLoading: false });
+    }
+  },
 
-getMyChatPartners: async () => {
-  set({ isUsersLoading: true });
-  try {
-    const res = await axiosInstance.get("/messages/chats");
+  getMyChatPartners: async () => {
+    set({ isUsersLoading: true });
+    try {
+      const res = await axiosInstance.get("/messages/chats");
 
-    const data = res.data;
+      const data = res.data;
 
-    const chatsArray =
-      data?.chats ??
-      data?.users ??
-      data?.data ??
-      (Array.isArray(data) ? data : []);
+      const chatsArray =
+        data?.chats ??
+        data?.users ??
+        data?.data ??
+        (Array.isArray(data) ? data : []);
 
-    set({ chats: chatsArray });
-  } catch (error) {
-    toast.error(error.response?.data?.message || "Failed to load chats");
-  } finally {
-    set({ isUsersLoading: false });
-  }
-},
+      set({ chats: chatsArray });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load chats");
+    } finally {
+      set({ isUsersLoading: false });
+    }
+  },
 
+  getMessagesByUserId: async (userId) => {
+    set({ isMessagesLoading: true });
+    try {
+      const res = await axiosInstance.get(`/messages/${userId}`);
 
-getMessagesByUserId: async (userId) => {
-  set({ isMessagesLoading: true });
-  try {
-    const res = await axiosInstance.get(`/messages/${userId}`);
+      const data =
+        res.data?.messages ?? (Array.isArray(res.data) ? res.data : []);
 
-    const data =
-      res.data?.messages ??
-      (Array.isArray(res.data) ? res.data : []);
+      set({ messages: data });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Something went wrong");
+    } finally {
+      set({ isMessagesLoading: false });
+    }
+  },
 
-    set({ messages: data });
-  } catch (error) {
-    toast.error(error.response?.data?.message || "Something went wrong");
-  } finally {
-    set({ isMessagesLoading: false });
-  }
-},
+  sendMessage: async (messageData) => {
+    const { selectedUser } = get();
+    const { authUser } = useAuthStore.getState();
 
+    const tempId = `temp-${Date.now()}`;
 
-sendMessage: async (messageData) => {
-  const { selectedUser } = get();
-  const { authUser } = useAuthStore.getState();
+    const optimisticMessage = {
+      _id: tempId,
+      senderId: authUser._id,
+      senderName: authUser.fullName || authUser.username || "Unknown", // add this
+      receiverId: selectedUser._id,
+      text: messageData.text,
+      image: messageData.image,
+      createdAt: new Date().toISOString(),
+      isOptimistic: true,
+    };
 
-  const tempId = `temp-${Date.now()}`;
-
-  const optimisticMessage = {
-    _id: tempId,
-    senderId: authUser._id,
-    receiverId: selectedUser._id,
-    text: messageData.text,
-    image: messageData.image,
-    createdAt: new Date().toISOString(),
-    isOptimistic: true
-  };
-
-  // Add optimistic message using latest state
-  set(state => ({
-    messages: [...state.messages, optimisticMessage]
-  }));
-
-  try {
-    const res = await axiosInstance.post(
-      `/messages/send/${selectedUser._id}`,
-      messageData
-    );
-
-    // Replace optimistic message with real one
-    set(state => ({
-      messages: state.messages
-        .filter(m => m._id !== tempId)
-        .concat(res.data.newMessage)
+    set((state) => ({
+      messages: [...state.messages, optimisticMessage],
     }));
 
-  } catch (error) {
-    // rollback
-    set(state => ({
-      messages: state.messages.filter(m => m._id !== tempId)
-    }));
+    try {
+      const res = await axiosInstance.post(
+        `/messages/send/${selectedUser._id}`,
+        {
+          ...messageData,
+          senderName: authUser.fullName || authUser.username || "Unknown", // send it if you want backend to log/display
+        }
+      );
 
-    toast.error(error.response?.data?.message || "Something went wrong");
-  }
-},
+      set((state) => ({
+        messages: state.messages
+          .filter((m) => m._id !== tempId)
+          .concat(res.data.newMessage),
+      }));
+    } catch (error) {
+      set((state) => ({
+        messages: state.messages.filter((m) => m._id !== tempId),
+      }));
+      toast.error(error.response?.data?.message || "Something went wrong");
+    }
+  },
 
   subscribeToMessages: () => {
     const { selectedUser, isSoundEnabled } = get();
@@ -151,7 +147,9 @@ sendMessage: async (messageData) => {
         const notificationSound = new Audio("/sounds/notification.mp3");
 
         notificationSound.currentTime = 0; // reset to start
-        notificationSound.play().catch((e) => console.log("Audio play failed:", e));
+        notificationSound
+          .play()
+          .catch((e) => console.log("Audio play failed:", e));
       }
     });
   },

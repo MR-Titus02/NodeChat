@@ -12,11 +12,11 @@ function ChatPage() {
   const { activeTab, selectedUser } = useChatStore();
 
   return (
-    <div className="relative w-full h-[100dvh] max-w-5xl mx-auto px-2 md:px-6 lg:px-8 py-4 md:py-6 lg:py-8">
-      <BorderAnimationContainer className="flex h-full">
-        {/* ---------------- Sidebar (Left) ---------------- */}
+    <div className="relative w-full h-[100dvh] max-w-5xl mx-auto px-2 md:px-6 py-4">
+      <BorderAnimationContainer className="flex h-full gap-3">
+        {/* ---------- Sidebar ---------- */}
         <div
-          className={`bg-slate-800/50 backdrop-blur-sm w-full md:w-80 flex flex-col h-full
+          className={`bg-slate-800/50 backdrop-blur-sm w-full md:w-80 flex flex-col h-full rounded-2xl
             ${selectedUser ? "hidden sm:flex" : "flex"}`}
         >
           <ProfileHeader />
@@ -26,16 +26,22 @@ function ChatPage() {
           </div>
         </div>
 
-        {/* ---------------- Chat Overlay / Container ---------------- */}
-        {selectedUser && (
-          <div className="fixed inset-0 z-50 md:relative md:flex-1 flex flex-col bg-slate-900/95 md:bg-slate-900/50 p-2 md:p-0 sm:rounded-none md:rounded-2xl md:overflow-hidden">
+        {/* ---------- Chat Container ---------- */}
+        {selectedUser ? (
+          <div
+            className="
+              fixed inset-0 z-50
+              md:static md:flex-1
+              flex flex-col
+              bg-slate-900/95 md:bg-slate-900/50
+              md:rounded-2xl
+              overflow-hidden
+            "
+          >
             <ChatContainer />
           </div>
-        )}
-
-        {/* Desktop-only placeholder */}
-        {!selectedUser && (
-          <div className="hidden md:flex flex-1 flex-col bg-slate-900/50 backdrop-blur-sm">
+        ) : (
+          <div className="hidden md:flex flex-1 bg-slate-900/50 rounded-2xl">
             <NoConversationPlaceholder />
           </div>
         )}
