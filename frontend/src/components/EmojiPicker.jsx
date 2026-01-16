@@ -1,36 +1,26 @@
 import { useEffect, useRef } from "react";
 import Picker from "emoji-picker-react";
-import data from "@emoji-mart/data";
 
-function EmojiPicker({ onSelect, onClose }) {
+export default function EmojiPickerPopover({ onSelect, onClose }) {
   const pickerRef = useRef(null);
 
-  // close when clicking outside
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+    const handleClickOutside = (event) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target)) {
         onClose?.();
       }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [onClose]);
 
   return (
-    <div
-      ref={pickerRef}
-      className="rounded-xl shadow-xl border border-slate-700 bg-slate-900"
-    >
+    <div ref={pickerRef} className="absolute bottom-full mb-2 right-0 z-50">
       <Picker
-        data={data}
-        theme="dark"
-        previewPosition="none"
-        skinTonePosition="none"
-        onEmojiSelect={(emoji) => onSelect(emoji.native)}
+        onEmojiClick={(emojiData) => onSelect(emojiData.emoji)}
+        disableAutoFocus={true}
+        native
       />
     </div>
   );
 }
-
-export default EmojiPicker;
