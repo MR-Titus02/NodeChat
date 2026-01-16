@@ -8,18 +8,29 @@ function MessageInput() {
   const { playRandomKeyStrokeSound } = useKeyboardSound();
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
+
   const fileInputRef = useRef(null);
+  const textInputRef = useRef(null); // ✅ NEW
+
   const { sendMessage, isSoundEnabled } = useChatStore();
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!text.trim() && !imagePreview) return;
 
     if (isSoundEnabled) playRandomKeyStrokeSound();
-    sendMessage({ text: text.trim(), image: imagePreview });
 
+    await sendMessage({ text: text.trim(), image: imagePreview });
+
+    // 🔥 IMPORTANT: keep keyboard open
+    requestAnimationFrame(() => {
+      textInputRef.current?.focus();
+    });
+
+    // clear AFTER focus restore
     setText("");
     setImagePreview(null);
+
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -36,18 +47,17 @@ function MessageInput() {
 
   const removeImage = () => {
     setImagePreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    fileInputRef.current.value = "";
+    textInputRef.current?.focus();
   };
 
   return (
     <div className="border-t border-slate-700/50 bg-slate-900/95 px-2 py-2 flex-shrink-0">
-      {/* Image preview */}
       {imagePreview && (
         <div className="max-w-3xl mx-auto mb-2">
           <div className="relative w-fit">
             <img
               src={imagePreview}
-              alt="Preview"
               className="w-20 h-20 object-cover rounded-lg border border-slate-700"
             />
             <button
@@ -61,13 +71,12 @@ function MessageInput() {
         </div>
       )}
 
-      {/* Input row */}
       <form
         onSubmit={handleSendMessage}
         className="max-w-3xl mx-auto flex items-center gap-2 overflow-x-hidden"
       >
-        {/* TEXT INPUT */}
         <input
+          ref={textInputRef}          // ✅ KEY FIX
           type="text"
           value={text}
           onChange={(e) => {
@@ -82,13 +91,12 @@ function MessageInput() {
             rounded-lg
             px-3
             py-2
-            text-[16px]     /* 🔥 prevents mobile zoom */
+            text-[16px]
             text-white
             focus:outline-none
           "
         />
 
-        {/* IMAGE PICKER */}
         <input
           type="file"
           accept="image/*"
@@ -96,15 +104,15 @@ function MessageInput() {
           onChange={handleImageChange}
           className="hidden"
         />
+
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="flex-shrink-0 rounded-lg p-2 bg-slate-800/60 hover:bg-slate-700"
+          className="flex-shrink-0 rounded-lg p-2 bg-slate-800/60"
         >
           <ImageIcon className="w-5 h-5 text-slate-300" />
         </button>
 
-        {/* SEND BUTTON */}
         <button
           type="submit"
           disabled={!text.trim() && !imagePreview}
