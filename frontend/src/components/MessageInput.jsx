@@ -11,12 +11,15 @@ function MessageInput() {
 
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const fileInputRef = useRef(null);
+  const textInputRef = useRef(null); // ✅ NEW
+
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
   const inputRef = useRef(null);
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!text.trim() && !imagePreview) return;
 
@@ -27,6 +30,14 @@ function MessageInput() {
       image: imagePreview
     });
 
+    await sendMessage({ text: text.trim(), image: imagePreview });
+
+    // 🔥 IMPORTANT: keep keyboard open
+    requestAnimationFrame(() => {
+      textInputRef.current?.focus();
+    });
+
+    // clear AFTER focus restore
     setText("");
     setImagePreview(null);
     setShowEmojiPicker(false);
@@ -66,7 +77,8 @@ function MessageInput() {
 
   const removeImage = () => {
     setImagePreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+    fileInputRef.current.value = "";
+    textInputRef.current?.focus();
   };
 
   return (
@@ -88,7 +100,6 @@ function MessageInput() {
           <div className="relative w-fit">
             <img
               src={imagePreview}
-              alt="Preview"
               className="w-20 h-20 object-cover rounded-lg border border-slate-700"
             />
             <button
@@ -107,9 +118,8 @@ function MessageInput() {
         onSubmit={handleSendMessage}
         className="max-w-3xl mx-auto flex items-center gap-2"
       >
-        {/* TEXT INPUT */}
         <input
-          ref={inputRef}
+          ref={textInputRef}          // ✅ KEY FIX
           type="text"
           value={text}
           onChange={(e) => {
@@ -130,16 +140,6 @@ function MessageInput() {
           "
         />
 
-        {/* EMOJI BUTTON (DESKTOP) */}
-        <button
-          type="button"
-          onClick={() => setShowEmojiPicker((v) => !v)}
-          className="hidden md:flex flex-shrink-0 rounded-lg p-2 bg-slate-800/60 hover:bg-slate-700"
-        >
-          <SmileIcon className="w-5 h-5 text-slate-300" />
-        </button>
-
-        {/* IMAGE PICKER */}
         <input
           type="file"
           accept="image/*"
@@ -147,10 +147,11 @@ function MessageInput() {
           onChange={handleImageChange}
           className="hidden"
         />
+
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="flex-shrink-0 rounded-lg p-2 bg-slate-800/60 hover:bg-slate-700"
+          className="flex-shrink-0 rounded-lg p-2 bg-slate-800/60"
         >
           <ImageIcon className="w-5 h-5 text-slate-300" />
         </button>
