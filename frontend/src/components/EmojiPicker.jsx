@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import Picker from "@emoji-mart/react";
+import Picker from "emoji-picker-react";
 import data from "@emoji-mart/data";
 
 function EmojiPicker({ onSelect, onClose }) {
