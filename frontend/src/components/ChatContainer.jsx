@@ -6,6 +6,21 @@ import NoChatHistoryPlaceholder from "./NoChatHistoryPlaceholder";
 import MessageInput from "./MessageInput";
 import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
 
+/* Detect emoji-only messages (1–3 emojis) */
+const isEmojiOnlyMessage = (text = "") => {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  const emojiRegex =
+    /^(?:\p{Emoji_Presentation}|\p{Extended_Pictographic})+$/u;
+
+  const emojis = trimmed.match(
+    /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu
+  );
+
+  return emojiRegex.test(trimmed) && emojis && emojis.length <= 3;
+};
+
 function ChatContainer() {
   const {
     selectedUser,
@@ -36,7 +51,6 @@ function ChatContainer() {
   }, [messages]);
 
   return (
-    // 👇 CRITICAL: min-h-0
     <div className="flex flex-col h-full min-h-0">
       <ChatHeader />
 
@@ -46,32 +60,47 @@ function ChatContainer() {
           <MessagesLoadingSkeleton />
         ) : messages.length > 0 ? (
           <div className="max-w-3xl mx-auto space-y-4">
-            {messages.map((msg) => (
-              <div
-                key={msg._id}
-                className={`chat ${
-                  String(msg.senderId) === String(authUser._id)
-                    ? "chat-end"
-                    : "chat-start"
-                }`}
-              >
+            {messages.map((msg) => {
+              const isMine =
+                String(msg.senderId) === String(authUser._id);
+
+              const isEmojiOnly = isEmojiOnlyMessage(msg.text);
+              const isSingleEmoji = isEmojiOnly && msg.text.trim().length <= 2;
+
+              return (
                 <div
-                  className={`chat-bubble ${
-                    String(msg.senderId) === String(authUser._id)
-                      ? "bg-cyan-600 text-white"
-                      : "bg-slate-800 text-slate-200"
+                  key={msg._id}
+                  className={`chat ${
+                    isMine ? "chat-end" : "chat-start"
                   }`}
                 >
-                  {msg.image && (
-                    <img
-                      src={msg.image}
-                      className="rounded-lg h-48 object-cover"
-                    />
-                  )}
-                  {msg.text && <p className="mt-2">{msg.text}</p>}
+                  <div
+                    className={`chat-bubble ${
+                      isMine
+                        ? "bg-cyan-600 text-white"
+                        : "bg-slate-800 text-slate-200"
+                    } ${isEmojiOnly ? "px-4 py-3" : ""}`}
+                  >
+                    {msg.image && (
+                      <img
+                        src={msg.image}
+                        className="rounded-lg h-48 object-cover"
+                      />
+                    )}
+
+                    {msg.text && (
+                      <p
+                        className={`
+                          ${isSingleEmoji ? "text-6xl md:text-8xl leading-none text-center" : "mt-2 text-base"}
+                        `}
+                      >
+                        {msg.text}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             <div ref={messageEndRef} />
           </div>
         ) : (
@@ -79,7 +108,7 @@ function ChatContainer() {
         )}
       </div>
 
-      {/* 👇 MUST NOT shrink */}
+      {/* Input */}
       <div className="flex-shrink-0">
         <MessageInput />
       </div>
