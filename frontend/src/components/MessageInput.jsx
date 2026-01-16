@@ -2,25 +2,55 @@ import { useRef, useState } from "react";
 import useKeyboardSound from "../hooks/useKeyboardSound";
 import { useChatStore } from "../store/useChatStore";
 import toast from "react-hot-toast";
-import { ImageIcon, SendIcon, XIcon } from "lucide-react";
+import { ImageIcon, SendIcon, XIcon, SmileIcon } from "lucide-react";
+import EmojiPicker from "./EmojiPicker";
 
 function MessageInput() {
   const { playRandomKeyStrokeSound } = useKeyboardSound();
+  const { sendMessage, isSoundEnabled } = useChatStore();
+
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+
   const fileInputRef = useRef(null);
-  const { sendMessage, isSoundEnabled } = useChatStore();
+  const inputRef = useRef(null);
 
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!text.trim() && !imagePreview) return;
 
     if (isSoundEnabled) playRandomKeyStrokeSound();
-    sendMessage({ text: text.trim(), image: imagePreview });
+
+    sendMessage({
+      text: text.trim(),
+      image: imagePreview
+    });
 
     setText("");
     setImagePreview(null);
+    setShowEmojiPicker(false);
+
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleEmojiSelect = (emoji) => {
+    const input = inputRef.current;
+    if (!input) return;
+
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+
+    const updatedText =
+      text.slice(0, start) + emoji + text.slice(end);
+
+    setText(updatedText);
+
+    // restore cursor position
+    requestAnimationFrame(() => {
+      input.focus();
+      input.selectionStart = input.selectionEnd = start + emoji.length;
+    });
   };
 
   const handleImageChange = (e) => {
@@ -40,8 +70,19 @@ function MessageInput() {
   };
 
   return (
-    <div className="border-t border-slate-700/50 bg-slate-900/95 px-2 py-2 flex-shrink-0">
-      {/* Image preview */}
+    <div className="relative border-t border-slate-700/50 bg-slate-900/95 px-2 py-2 flex-shrink-0">
+
+      {/* EMOJI PICKER (DESKTOP FRIENDLY) */}
+      {showEmojiPicker && (
+        <div className="absolute bottom-full left-0 right-0 mb-2 flex justify-center z-50">
+          <EmojiPicker
+            onSelect={handleEmojiSelect}
+            onClose={() => setShowEmojiPicker(false)}
+          />
+        </div>
+      )}
+
+      {/* IMAGE PREVIEW */}
       {imagePreview && (
         <div className="max-w-3xl mx-auto mb-2">
           <div className="relative w-fit">
@@ -61,13 +102,14 @@ function MessageInput() {
         </div>
       )}
 
-      {/* Input row */}
+      {/* INPUT ROW */}
       <form
         onSubmit={handleSendMessage}
-        className="max-w-3xl mx-auto flex items-center gap-2 overflow-x-hidden"
+        className="max-w-3xl mx-auto flex items-center gap-2"
       >
         {/* TEXT INPUT */}
         <input
+          ref={inputRef}
           type="text"
           value={text}
           onChange={(e) => {
@@ -82,11 +124,20 @@ function MessageInput() {
             rounded-lg
             px-3
             py-2
-            text-[16px]     /* 🔥 prevents mobile zoom */
+            text-[16px]
             text-white
             focus:outline-none
           "
         />
+
+        {/* EMOJI BUTTON (DESKTOP) */}
+        <button
+          type="button"
+          onClick={() => setShowEmojiPicker((v) => !v)}
+          className="hidden md:flex flex-shrink-0 rounded-lg p-2 bg-slate-800/60 hover:bg-slate-700"
+        >
+          <SmileIcon className="w-5 h-5 text-slate-300" />
+        </button>
 
         {/* IMAGE PICKER */}
         <input
@@ -104,7 +155,7 @@ function MessageInput() {
           <ImageIcon className="w-5 h-5 text-slate-300" />
         </button>
 
-        {/* SEND BUTTON */}
+        {/* SEND */}
         <button
           type="submit"
           disabled={!text.trim() && !imagePreview}
