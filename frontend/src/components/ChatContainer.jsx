@@ -6,7 +6,7 @@ import NoChatHistoryPlaceholder from "./NoChatHistoryPlaceholder";
 import MessageInput from "./MessageInput";
 import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
 
-/* Detect emoji-only messages (1–3 emojis) */
+/* 👇 Helper: detect emoji-only messages (1–3 emojis) */
 const isEmojiOnlyMessage = (text = "") => {
   const trimmed = text.trim();
   if (!trimmed) return false;
@@ -65,7 +65,6 @@ function ChatContainer() {
                 String(msg.senderId) === String(authUser._id);
 
               const isEmojiOnly = isEmojiOnlyMessage(msg.text);
-              const isSingleEmoji = isEmojiOnly && msg.text.trim().length <= 2;
 
               return (
                 <div
@@ -79,7 +78,9 @@ function ChatContainer() {
                       isMine
                         ? "bg-cyan-600 text-white"
                         : "bg-slate-800 text-slate-200"
-                    } ${isEmojiOnly ? "px-4 py-3" : ""}`}
+                    } ${
+                      isEmojiOnly ? "px-4 py-3" : ""
+                    }`}
                   >
                     {msg.image && (
                       <img
@@ -90,9 +91,11 @@ function ChatContainer() {
 
                     {msg.text && (
                       <p
-                        className={`
-                          ${isSingleEmoji ? "text-6xl md:text-8xl leading-none text-center" : "mt-2 text-base"}
-                        `}
+                        className={
+                          isEmojiOnly
+                            ? "text-5xl leading-tight text-center"
+                            : "mt-2 text-base"
+                        }
                       >
                         {msg.text}
                       </p>
