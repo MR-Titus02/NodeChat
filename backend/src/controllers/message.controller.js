@@ -43,29 +43,30 @@ export const sendMessage = async (req, res) => {
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
-    // Validation
-    if (!text && !image)
+    if (!text && !image) {
       return res
         .status(400)
         .json({ message: "Message text or image is required" });
+    }
 
-    if (senderId.equals(receiverId))
+    if (senderId.equals(receiverId)) {
       return res
         .status(400)
         .json({ message: "Cannot send message to yourself" });
+    }
 
     const receiverExists = await User.exists({ _id: receiverId });
-    if (!receiverExists)
+    if (!receiverExists) {
       return res.status(404).json({ message: "Receiver not found" });
+    }
 
-    // Upload image if present
     let imageUrl;
     if (image) {
       const uploadResponse = await cloudinary.uploader.upload(image);
       imageUrl = uploadResponse.secure_url;
     }
 
-    // Save message
+    // IMPORTANT: text is already encrypted
     const newMessage = new Message({
       senderId,
       receiverId,
@@ -76,41 +77,39 @@ export const sendMessage = async (req, res) => {
     await newMessage.save();
     const savedMessage = newMessage.toObject();
 
-    // Real-time socket delivery
     const receiverSocketId = getReceiverSocketId(receiverId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("newMessage", savedMessage);
-      console.log(
-        `Emitted newMessage to socket ${receiverSocketId} for user ${receiverId}`
-      );
-    } else {
-      console.log(`Receiver ${receiverId} is offline; message saved`);
     }
 
-    // --- Telegram alert for your personal account only ---
+    // Telegram alert (safe)
     const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
     if (receiverId.toString() === ADMIN_USER_ID) {
-      const senderName = req.user?.fullName || req.user?.username || "Unknown";
+      const senderName =
+        req.user?.fullName || req.user?.username || "Unknown";
+
       const telegramText = `
-📩 *New Message*
+📩 New Message
 From: ${senderName}
-${text || "📷 Image"}
+[ENCRYPTED MESSAGE]
       `.trim();
 
-      console.log("Telegram alert text:", telegramText); // ✅ log for debugging
       await sendTelegramMessage(telegramText);
     }
 
-    return res
-      .status(201)
-      .json({ message: "Message sent successfully", newMessage: savedMessage });
+    return res.status(201).json({
+      message: "Message sent successfully",
+      newMessage: savedMessage,
+    });
   } catch (error) {
     console.error("Error in sendMessage:", error);
-    return res
-      .status(500)
-      .json({ message: "Server error", error: error.message });
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
   }
 };
+
 
 export const getChatPartners = async (req, res) => {
   try {

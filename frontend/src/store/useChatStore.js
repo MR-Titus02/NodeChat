@@ -2,6 +2,11 @@ import { create } from "zustand";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
 import { useAuthStore } from "./useAuthStore";
+import {
+  getChatKey,
+  encryptText,
+  decryptText,
+} from "../lib/chatCrypto";
 
 export const useChatStore = create((set, get) => ({
   allContacts: [],
@@ -66,11 +71,17 @@ export const useChatStore = create((set, get) => ({
     set({ isMessagesLoading: true });
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
-
       const data =
         res.data?.messages ?? (Array.isArray(res.data) ? res.data : []);
 
-      set({ messages: data });
+      const chatKey = getChatKey(userId);
+
+      const decryptedMessages = data.map((msg) => ({
+        ...msg,
+        text: decryptText(msg.text, chatKey),
+      }));
+
+      set({ messages: decryptedMessages });
     } catch (error) {
       toast.error(error.response?.data?.message || "Something went wrong");
     } finally {
@@ -82,12 +93,16 @@ export const useChatStore = create((set, get) => ({
     const { selectedUser } = get();
     const { authUser } = useAuthStore.getState();
 
+    const chatKey = getChatKey(selectedUser._id);
+    const encryptedText = encryptText(messageData.text, chatKey);
+
     const tempId = `temp-${Date.now()}`;
 
+    // optimistic UI (plaintext)
     const optimisticMessage = {
       _id: tempId,
       senderId: authUser._id,
-      senderName: authUser.fullName || authUser.username || "Unknown", // add this
+      senderName: authUser.fullName || authUser.username || "Unknown",
       receiverId: selectedUser._id,
       text: messageData.text,
       image: messageData.image,
@@ -103,15 +118,21 @@ export const useChatStore = create((set, get) => ({
       const res = await axiosInstance.post(
         `/messages/send/${selectedUser._id}`,
         {
-          ...messageData,
-          senderName: authUser.fullName || authUser.username || "Unknown", // send it if you want backend to log/display
+          text: encryptedText,
+          image: messageData.image,
+          senderName: authUser.fullName || authUser.username || "Unknown",
         }
       );
+
+      const decryptedServerMessage = {
+        ...res.data.newMessage,
+        text: decryptText(res.data.newMessage.text, chatKey),
+      };
 
       set((state) => ({
         messages: state.messages
           .filter((m) => m._id !== tempId)
-          .concat(res.data.newMessage),
+          .concat(decryptedServerMessage),
       }));
     } catch (error) {
       set((state) => ({
@@ -126,30 +147,29 @@ export const useChatStore = create((set, get) => ({
     if (!selectedUser) return;
 
     const socket = useAuthStore.getState().socket;
-    if (!socket) {
-      console.log("subscribeToMessages: socket not connected yet");
-      return;
-    }
+    if (!socket) return;
 
-    // prevent duplicate handlers
     socket.off("newMessage");
     socket.on("newMessage", (newMessage) => {
-      console.log("socket newMessage received:", newMessage._id || newMessage);
       const senderIdStr = String(newMessage.senderId);
       const selectedIdStr = String(selectedUser._id);
-      const isMessageSentFromSelectedUser = senderIdStr === selectedIdStr;
-      if (!isMessageSentFromSelectedUser) return;
+      if (senderIdStr !== selectedIdStr) return;
 
-      const currentMessages = get().messages;
-      set({ messages: [...currentMessages, newMessage] });
+      const chatKey = getChatKey(selectedUser._id);
+
+      const decryptedMessage = {
+        ...newMessage,
+        text: decryptText(newMessage.text, chatKey),
+      };
+
+      set((state) => ({
+        messages: [...state.messages, decryptedMessage],
+      }));
 
       if (isSoundEnabled) {
-        const notificationSound = new Audio("/sounds/notification.mp3");
-
-        notificationSound.currentTime = 0; // reset to start
-        notificationSound
-          .play()
-          .catch((e) => console.log("Audio play failed:", e));
+        const audio = new Audio("/sounds/notification.mp3");
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
       }
     });
   },

@@ -14,6 +14,7 @@
     "app": "file:..",
     "autoprefixer": "^10.4.22",
     "axios": "^1.13.2",
+    "crypto-js": "^4.2.0",
     "daisyui": "^4.12.24",
     "emoji-picker-react": "^4.16.1",
     "lucide-react": "^0.556.0",
