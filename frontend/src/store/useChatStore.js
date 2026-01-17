@@ -8,6 +8,17 @@ import {
   decryptText,
 } from "../lib/chatCrypto";
 
+/**
+ * 🔐 Encryption rollout time (UTC)
+ * Change this to the exact time you deploy encryption
+ */
+const ENCRYPTION_ROLLOUT_TIME = new Date("2026-01-17T12:00:00Z");
+
+const shouldDecrypt = (msg) => {
+  if (!msg?.createdAt) return false;
+  return new Date(msg.createdAt) >= ENCRYPTION_ROLLOUT_TIME;
+};
+
 export const useChatStore = create((set, get) => ({
   allContacts: [],
   chats: [],
@@ -33,10 +44,7 @@ export const useChatStore = create((set, get) => ({
       const data = res.data;
 
       const contactsArray =
-        data?.contacts ??
-        data?.users ??
-        data?.data ??
-        (Array.isArray(data) ? data : []);
+        data?.contacts ?? data?.users ?? data?.data ?? (Array.isArray(data) ? data : []);
 
       set({ allContacts: contactsArray });
     } catch (error) {
@@ -50,14 +58,10 @@ export const useChatStore = create((set, get) => ({
     set({ isUsersLoading: true });
     try {
       const res = await axiosInstance.get("/messages/chats");
-
       const data = res.data;
 
       const chatsArray =
-        data?.chats ??
-        data?.users ??
-        data?.data ??
-        (Array.isArray(data) ? data : []);
+        data?.chats ?? data?.users ?? data?.data ?? (Array.isArray(data) ? data : []);
 
       set({ chats: chatsArray });
     } catch (error) {
@@ -78,7 +82,7 @@ export const useChatStore = create((set, get) => ({
 
       const decryptedMessages = data.map((msg) => ({
         ...msg,
-        text: decryptText(msg.text, chatKey),
+        text: shouldDecrypt(msg) ? decryptText(msg.text, chatKey) : msg.text,
       }));
 
       set({ messages: decryptedMessages });
@@ -124,9 +128,13 @@ export const useChatStore = create((set, get) => ({
         }
       );
 
+      const serverMessage = res.data.newMessage;
+
       const decryptedServerMessage = {
-        ...res.data.newMessage,
-        text: decryptText(res.data.newMessage.text, chatKey),
+        ...serverMessage,
+        text: shouldDecrypt(serverMessage)
+          ? decryptText(serverMessage.text, chatKey)
+          : serverMessage.text,
       };
 
       set((state) => ({
@@ -159,7 +167,9 @@ export const useChatStore = create((set, get) => ({
 
       const decryptedMessage = {
         ...newMessage,
-        text: decryptText(newMessage.text, chatKey),
+        text: shouldDecrypt(newMessage)
+          ? decryptText(newMessage.text, chatKey)
+          : newMessage.text,
       };
 
       set((state) => ({
