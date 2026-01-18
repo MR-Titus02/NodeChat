@@ -24,18 +24,18 @@ function ChatContainer() {
   const chatRef = useRef(null);
   const isInitialLoad = useRef(true);
 
-  // Fetch messages on chat switch
+  // 🔹 Fetch messages on chat switch
   useEffect(() => {
     if (!selectedUser) return;
 
     isInitialLoad.current = true;
-    fetchMessagesByUserId(selectedUser._id, true);
+    fetchMessagesByUserId(selectedUser._id, true); // reset messages
     subscribeToMessages();
 
     return () => unsubscribeFromMessages();
   }, [selectedUser, fetchMessagesByUserId, subscribeToMessages, unsubscribeFromMessages]);
 
-  // Scroll to bottom on first load of messages
+  // 🔹 Scroll to bottom on first load
   useEffect(() => {
     if (!chatRef.current || messages.length === 0) return;
 
@@ -45,17 +45,20 @@ function ChatContainer() {
     }
   }, [messages]);
 
-  // Auto-scroll when current user sends a new message
+  // 🔹 Auto-scroll whenever a new message arrives (sent or received)
   useEffect(() => {
     if (!chatRef.current || messages.length === 0) return;
 
     const lastMessage = messages[messages.length - 1];
-    if (String(lastMessage.senderId) === String(authUser._id)) {
-      chatRef.current.scrollTop = chatRef.current.scrollHeight;
-    }
-  }, [messages, authUser._id]);
+    if (!lastMessage) return;
 
-  // Handle scroll-to-top for older messages
+    // Always scroll on new message
+    setTimeout(() => {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }, 50); // delay to ensure DOM has rendered
+  }, [messages]);
+
+  // 🔹 Handle scroll-to-top for older messages
   const handleScroll = useCallback(() => {
     if (!chatRef.current) return;
     if (chatRef.current.scrollTop !== 0) return;
@@ -64,6 +67,7 @@ function ChatContainer() {
     const prevScrollHeight = chatRef.current.scrollHeight;
 
     fetchMessagesByUserId(selectedUser._id).then(() => {
+      // Maintain scroll position after prepending older messages
       chatRef.current.scrollTop = chatRef.current.scrollHeight - prevScrollHeight;
     });
   }, [selectedUser, fetchMessagesByUserId, hasMoreMessages, isMessagesLoading]);
@@ -72,7 +76,7 @@ function ChatContainer() {
     <div className="flex flex-col h-full min-h-0">
       <ChatHeader />
 
-      {/* Messages area */}
+      {/* Messages */}
       <div
         ref={chatRef}
         className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 py-4"
