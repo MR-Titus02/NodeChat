@@ -39,7 +39,7 @@ export const getMessagesByUserId = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { text, image } = req.body;
+    const { text, image, replyTo } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
@@ -65,50 +65,58 @@ export const sendMessage = async (req, res) => {
       imageUrl = uploadResponse.secure_url;
     }
 
-    // Save message
+    // Save message (WITH REPLY SUPPORT)
     const newMessage = new Message({
       senderId,
       receiverId,
       text,
       image: imageUrl,
+      replyTo: replyTo
+        ? {
+            messageId: replyTo.messageId,
+            text: replyTo.text,
+            senderId: replyTo.senderId,
+          }
+        : null,
     });
 
     await newMessage.save();
-    const savedMessage = newMessage.toObject();
+    const savedMessage = {
+  ...newMessage.toObject(),
+  replyTo: newMessage.replyTo || null,
+};
 
     // Real-time socket delivery
     const receiverSocketId = getReceiverSocketId(receiverId);
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("newMessage", savedMessage);
-      console.log(
-        `Emitted newMessage to socket ${receiverSocketId} for user ${receiverId}`
-      );
-    } else {
-      console.log(`Receiver ${receiverId} is offline; message saved`);
     }
 
-    // --- Telegram alert for your personal account only ---
+    // Telegram alert (unchanged)
     const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
     if (receiverId.toString() === ADMIN_USER_ID) {
-      const senderName = req.user?.fullName || req.user?.username || "Unknown";
+      const senderName =
+        req.user?.fullName || req.user?.username || "Unknown";
+
       const telegramText = `
 📩 *New Message*
 From: ${senderName}
 ${text || "📷 Image"}
       `.trim();
 
-      console.log("Telegram alert text:", telegramText); // ✅ log for debugging
       await sendTelegramMessage(telegramText);
     }
 
-    return res
-      .status(201)
-      .json({ message: "Message sent successfully", newMessage: savedMessage });
+    return res.status(201).json({
+      message: "Message sent successfully",
+      newMessage: savedMessage,
+    });
   } catch (error) {
     console.error("Error in sendMessage:", error);
-    return res
-      .status(500)
-      .json({ message: "Server error", error: error.message });
+    return res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
   }
 };
 
