@@ -11,6 +11,8 @@ export const useChatStore = create((set, get) => ({
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
+  messagesOffset: 0, // NEW: tracks how many messages have been loaded
+  hasMoreMessages: true, // NEW: indicates if there are older messages
 
   // 🔊 sound
   isSoundEnabled: JSON.parse(localStorage.getItem("isSoundEnabled")) === true,
@@ -22,7 +24,11 @@ export const useChatStore = create((set, get) => ({
 
   // 🧭 UI state
   setActiveTab: (tab) => set({ activeTab: tab }),
-  setSelectedUser: (selectedUser) => set({ selectedUser }),
+  setSelectedUser: (selectedUser) => {
+    set({ selectedUser });
+    // Reset messages when switching users
+    set({ messages: [], messagesOffset: 0, hasMoreMessages: true });
+  },
 
   // 🔁 REPLY STATE (NEW)
   replyToMessage: null,
@@ -35,13 +41,8 @@ export const useChatStore = create((set, get) => ({
     try {
       const res = await axiosInstance.get("/messages/contacts");
       const data = res.data;
-
       const contactsArray =
-        data?.contacts ??
-        data?.users ??
-        data?.data ??
-        (Array.isArray(data) ? data : []);
-
+        data?.contacts ?? data?.users ?? data?.data ?? (Array.isArray(data) ? data : []);
       set({ allContacts: contactsArray });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load contacts");
@@ -55,13 +56,8 @@ export const useChatStore = create((set, get) => ({
     try {
       const res = await axiosInstance.get("/messages/chats");
       const data = res.data;
-
       const chatsArray =
-        data?.chats ??
-        data?.users ??
-        data?.data ??
-        (Array.isArray(data) ? data : []);
-
+        data?.chats ?? data?.users ?? data?.data ?? (Array.isArray(data) ? data : []);
       set({ chats: chatsArray });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load chats");
@@ -70,7 +66,10 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  // 💬 messages
+  // 💬 MESSAGES
+  // ---------------------------------------
+  // Old method (commented out)
+  /*
   getMessagesByUserId: async (userId) => {
     set({ isMessagesLoading: true });
     try {
@@ -84,20 +83,53 @@ export const useChatStore = create((set, get) => ({
       set({ isMessagesLoading: false });
     }
   },
+  */
+
+  // NEW: Paginated message fetching
+  fetchMessagesByUserId: async (userId, reset = false) => {
+    if (get().isMessagesLoading) return;
+    if (reset) {
+      set({ messages: [], messagesOffset: 0, hasMoreMessages: true });
+    }
+
+    const { messagesOffset, messages, hasMoreMessages } = get();
+    if (!hasMoreMessages) return;
+
+    set({ isMessagesLoading: true });
+
+    try {
+      const res = await axiosInstance.get(
+        `/messages/${userId}?limit=50&offset=${reset ? 0 : messagesOffset}`
+      );
+
+      const newMessages = res.data?.messages ?? [];
+      const fetchedCount = res.data?.fetchedCount ?? newMessages.length;
+      const hasMore = res.data?.hasMore ?? fetchedCount === 50;
+
+      set({
+        messages: reset ? newMessages : [...newMessages, ...messages],
+        messagesOffset: messagesOffset + fetchedCount,
+        hasMoreMessages: hasMore,
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to load messages");
+    } finally {
+      set({ isMessagesLoading: false });
+    }
+  },
 
   sendMessage: async (messageData) => {
     const { selectedUser } = get();
     const { authUser } = useAuthStore.getState();
 
     const tempId = `temp-${Date.now()}`;
-
     const optimisticMessage = {
       _id: tempId,
       senderId: authUser._id,
       receiverId: selectedUser._id,
       text: messageData.text,
       image: messageData.image,
-      replyTo: messageData.replyTo || null, // ✅ IMPORTANT
+      replyTo: messageData.replyTo || null,
       createdAt: new Date().toISOString(),
       isOptimistic: true,
     };

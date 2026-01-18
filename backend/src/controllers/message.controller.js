@@ -174,3 +174,36 @@ export const getChatPartners = async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 };
+
+// Fetch messages with pagination (lazy load)
+export const getMessagesByUserIdPaginated = async (req, res) => {
+  try {
+    const myId = req.user._id;
+    const { id: userToChatId } = req.params;
+    const limit = parseInt(req.query.limit) || 50; // number of messages per fetch
+    const offset = parseInt(req.query.offset) || 0; // how many messages to skip
+
+    // Fetch messages sorted by newest first
+    const messages = await Message.find({
+      $or: [
+        { senderId: myId, receiverId: userToChatId },
+        { senderId: userToChatId, receiverId: myId },
+      ],
+    })
+      .sort({ createdAt: -1 }) // newest first
+      .skip(offset)
+      .limit(limit);
+
+    // Reverse to send oldest first for UI rendering
+    const messagesReversed = messages.reverse();
+
+    res.status(200).json({
+      messages: messagesReversed,
+      fetchedCount: messagesReversed.length,
+      hasMore: messagesReversed.length === limit, // indicates if there are more messages
+    });
+  } catch (error) {
+    console.log("Error in getMessagesByUserIdPaginated:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};

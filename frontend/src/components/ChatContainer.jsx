@@ -1,6 +1,6 @@
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import ChatHeader from "./ChatHeader";
 import NoChatHistoryPlaceholder from "./NoChatHistoryPlaceholder";
 import MessageInput from "./MessageInput";
@@ -10,9 +10,10 @@ import MessageBubble from "./MessageBubble";
 function ChatContainer() {
   const {
     selectedUser,
-    getMessagesByUserId,
+    fetchMessagesByUserId, // NEW paginated method
     messages,
     isMessagesLoading,
+    hasMoreMessages,
     subscribeToMessages,
     unsubscribeFromMessages,
     replyToMessage,
@@ -20,44 +21,62 @@ function ChatContainer() {
   } = useChatStore();
 
   const { authUser } = useAuthStore();
-  const messageEndRef = useRef(null);
+  const chatRef = useRef(null);
+  const isInitialLoad = useRef(true);
 
+  // Fetch messages when switching users
   useEffect(() => {
     if (!selectedUser) return;
 
-    getMessagesByUserId(selectedUser._id);
+    fetchMessagesByUserId(selectedUser._id, true); // reset = true
     subscribeToMessages();
 
     return () => unsubscribeFromMessages();
-  }, [
-    getMessagesByUserId,
-    selectedUser,
-    subscribeToMessages,
-    unsubscribeFromMessages,
-  ]);
+  }, [selectedUser, fetchMessagesByUserId, subscribeToMessages, unsubscribeFromMessages]);
 
+  // Scroll to bottom on first load
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isInitialLoad.current) {
+      chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "auto" });
+      isInitialLoad.current = false;
+    }
   }, [messages]);
+
+  // Handle scroll to top to load older messages
+  const handleScroll = useCallback(() => {
+    if (!chatRef.current) return;
+    if (chatRef.current.scrollTop !== 0) return; // only load when scrolled to top
+    if (!hasMoreMessages || isMessagesLoading) return;
+
+    const prevScrollHeight = chatRef.current.scrollHeight;
+
+    fetchMessagesByUserId(selectedUser._id).then(() => {
+      // Maintain scroll position after loading older messages
+      chatRef.current.scrollTop = chatRef.current.scrollHeight - prevScrollHeight;
+    });
+  }, [selectedUser, fetchMessagesByUserId, hasMoreMessages, isMessagesLoading]);
 
   return (
     <div className="flex flex-col h-full min-h-0">
       <ChatHeader />
 
       {/* Messages area */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 py-4">
-        {isMessagesLoading ? (
+      <div
+        ref={chatRef}
+        className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 py-4"
+        onScroll={handleScroll}
+      >
+        {isMessagesLoading && messages.length === 0 ? (
           <MessagesLoadingSkeleton />
         ) : messages.length > 0 ? (
           <div className="max-w-3xl mx-auto space-y-4">
             {messages.map((msg) => (
               <MessageBubble key={msg._id} msg={msg} />
             ))}
-            <div ref={messageEndRef} />
           </div>
-        ) : (
+        ) : selectedUser ? (
           <NoChatHistoryPlaceholder name={selectedUser.fullName} />
-        )}
+        ) : null}
       </div>
 
       {/* Reply preview */}
