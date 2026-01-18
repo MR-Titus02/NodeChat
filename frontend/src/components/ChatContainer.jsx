@@ -10,7 +10,7 @@ import MessageBubble from "./MessageBubble";
 function ChatContainer() {
   const {
     selectedUser,
-    fetchMessagesByUserId, // NEW paginated method
+    fetchMessagesByUserId,
     messages,
     isMessagesLoading,
     hasMoreMessages,
@@ -24,34 +24,46 @@ function ChatContainer() {
   const chatRef = useRef(null);
   const isInitialLoad = useRef(true);
 
-  // Fetch messages when switching users
+  // Fetch messages on chat switch
   useEffect(() => {
     if (!selectedUser) return;
 
-    fetchMessagesByUserId(selectedUser._id, true); // reset = true
+    isInitialLoad.current = true;
+    fetchMessagesByUserId(selectedUser._id, true);
     subscribeToMessages();
 
     return () => unsubscribeFromMessages();
   }, [selectedUser, fetchMessagesByUserId, subscribeToMessages, unsubscribeFromMessages]);
 
-  // Scroll to bottom on first load
+  // Scroll to bottom on first load of messages
   useEffect(() => {
+    if (!chatRef.current || messages.length === 0) return;
+
     if (isInitialLoad.current) {
-      chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "auto" });
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
       isInitialLoad.current = false;
     }
   }, [messages]);
 
-  // Handle scroll to top to load older messages
+  // Auto-scroll when current user sends a new message
+  useEffect(() => {
+    if (!chatRef.current || messages.length === 0) return;
+
+    const lastMessage = messages[messages.length - 1];
+    if (String(lastMessage.senderId) === String(authUser._id)) {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }
+  }, [messages, authUser._id]);
+
+  // Handle scroll-to-top for older messages
   const handleScroll = useCallback(() => {
     if (!chatRef.current) return;
-    if (chatRef.current.scrollTop !== 0) return; // only load when scrolled to top
+    if (chatRef.current.scrollTop !== 0) return;
     if (!hasMoreMessages || isMessagesLoading) return;
 
     const prevScrollHeight = chatRef.current.scrollHeight;
 
     fetchMessagesByUserId(selectedUser._id).then(() => {
-      // Maintain scroll position after loading older messages
       chatRef.current.scrollTop = chatRef.current.scrollHeight - prevScrollHeight;
     });
   }, [selectedUser, fetchMessagesByUserId, hasMoreMessages, isMessagesLoading]);
