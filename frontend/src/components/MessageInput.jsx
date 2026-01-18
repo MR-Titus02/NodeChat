@@ -7,7 +7,12 @@ import EmojiPicker from "./EmojiPicker";
 
 function MessageInput() {
   const { playRandomKeyStrokeSound } = useKeyboardSound();
-  const { sendMessage, isSoundEnabled } = useChatStore();
+  const {
+    sendMessage,
+    isSoundEnabled,
+    replyToMessage,       // ✅ message being replied to
+    clearReplyToMessage,  // ✅ function to clear reply preview
+  } = useChatStore();
 
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
@@ -16,24 +21,36 @@ function MessageInput() {
   const fileInputRef = useRef(null);
   const inputRef = useRef(null);
 
+  // ------------------ SEND MESSAGE ------------------
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!text.trim() && !imagePreview) return;
 
     if (isSoundEnabled) playRandomKeyStrokeSound();
 
+    // Include replyTo in the payload if replying to a message
     sendMessage({
       text: text.trim(),
-      image: imagePreview
+      image: imagePreview,
+      replyTo: replyToMessage
+        ? {
+            messageId: replyToMessage._id,
+            text: replyToMessage.text,
+            senderId: replyToMessage.senderId,
+          }
+        : null,
     });
 
+    // Clear input and reply preview
     setText("");
     setImagePreview(null);
     setShowEmojiPicker(false);
+    clearReplyToMessage();
 
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  // ------------------ EMOJI PICKER ------------------
   const handleEmojiSelect = (emoji) => {
     const input = inputRef.current;
     if (!input) return;
@@ -41,18 +58,17 @@ function MessageInput() {
     const start = input.selectionStart;
     const end = input.selectionEnd;
 
-    const updatedText =
-      text.slice(0, start) + emoji + text.slice(end);
-
+    const updatedText = text.slice(0, start) + emoji + text.slice(end);
     setText(updatedText);
 
-    // restore cursor position
+    // Restore cursor position
     requestAnimationFrame(() => {
       input.focus();
       input.selectionStart = input.selectionEnd = start + emoji.length;
     });
   };
 
+  // ------------------ IMAGE HANDLING ------------------
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (!file || !file.type.startsWith("image/")) {
@@ -71,8 +87,7 @@ function MessageInput() {
 
   return (
     <div className="relative border-t border-slate-700/50 bg-slate-900/95 px-2 py-2 flex-shrink-0">
-
-      {/* EMOJI PICKER (DESKTOP FRIENDLY) */}
+      {/* EMOJI PICKER */}
       {showEmojiPicker && (
         <div className="absolute bottom-full left-0 right-0 mb-2 flex justify-center z-50">
           <EmojiPicker
@@ -130,7 +145,7 @@ function MessageInput() {
           "
         />
 
-        {/* EMOJI BUTTON (DESKTOP) */}
+        {/* EMOJI BUTTON */}
         <button
           type="button"
           onClick={() => setShowEmojiPicker((v) => !v)}
@@ -155,7 +170,7 @@ function MessageInput() {
           <ImageIcon className="w-5 h-5 text-slate-300" />
         </button>
 
-        {/* SEND */}
+        {/* SEND BUTTON */}
         <button
           type="submit"
           disabled={!text.trim() && !imagePreview}

@@ -5,21 +5,7 @@ import ChatHeader from "./ChatHeader";
 import NoChatHistoryPlaceholder from "./NoChatHistoryPlaceholder";
 import MessageInput from "./MessageInput";
 import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
-
-/* Detect emoji-only messages (1–3 emojis) */
-const isEmojiOnlyMessage = (text = "") => {
-  const trimmed = text.trim();
-  if (!trimmed) return false;
-
-  const emojiRegex =
-    /^(?:\p{Emoji_Presentation}|\p{Extended_Pictographic})+$/u;
-
-  const emojis = trimmed.match(
-    /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu
-  );
-
-  return emojiRegex.test(trimmed) && emojis && emojis.length <= 3;
-};
+import MessageBubble from "./MessageBubble";
 
 function ChatContainer() {
   const {
@@ -29,6 +15,8 @@ function ChatContainer() {
     isMessagesLoading,
     subscribeToMessages,
     unsubscribeFromMessages,
+    replyToMessage,
+    clearReplyToMessage,
   } = useChatStore();
 
   const { authUser } = useAuthStore();
@@ -36,8 +24,10 @@ function ChatContainer() {
 
   useEffect(() => {
     if (!selectedUser) return;
+
     getMessagesByUserId(selectedUser._id);
     subscribeToMessages();
+
     return () => unsubscribeFromMessages();
   }, [
     getMessagesByUserId,
@@ -60,47 +50,9 @@ function ChatContainer() {
           <MessagesLoadingSkeleton />
         ) : messages.length > 0 ? (
           <div className="max-w-3xl mx-auto space-y-4">
-            {messages.map((msg) => {
-              const isMine =
-                String(msg.senderId) === String(authUser._id);
-
-              const isEmojiOnly = isEmojiOnlyMessage(msg.text);
-              const isSingleEmoji = isEmojiOnly && msg.text.trim().length <= 2;
-
-              return (
-                <div
-                  key={msg._id}
-                  className={`chat ${
-                    isMine ? "chat-end" : "chat-start"
-                  }`}
-                >
-                  <div
-                    className={`chat-bubble ${
-                      isMine
-                        ? "bg-cyan-600 text-white"
-                        : "bg-slate-800 text-slate-200"
-                    } ${isEmojiOnly ? "px-4 py-3" : ""}`}
-                  >
-                    {msg.image && (
-                      <img
-                        src={msg.image}
-                        className="rounded-lg h-48 object-cover"
-                      />
-                    )}
-
-                    {msg.text && (
-                      <p
-                        className={`
-                          ${isSingleEmoji ? "text-6xl md:text-8xl leading-none text-center" : "mt-2 text-base"}
-                        `}
-                      >
-                        {msg.text}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {messages.map((msg) => (
+              <MessageBubble key={msg._id} msg={msg} />
+            ))}
             <div ref={messageEndRef} />
           </div>
         ) : (
@@ -108,9 +60,33 @@ function ChatContainer() {
         )}
       </div>
 
+      {/* Reply preview */}
+      {replyToMessage && (
+        <div className="px-4 py-2 bg-slate-800 border-t border-slate-700 flex items-center justify-between">
+          <div className="text-sm text-slate-300 truncate">
+            <span className="text-cyan-400 font-medium">
+              Replying to{" "}
+              {replyToMessage.senderId === authUser._id
+                ? "yourself"
+                : selectedUser.fullName}
+            </span>
+            <div className="truncate text-slate-400">
+              {replyToMessage.text || "📷 Image"}
+            </div>
+          </div>
+
+          <button
+            onClick={clearReplyToMessage}
+            className="ml-3 text-slate-400 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Input */}
       <div className="flex-shrink-0">
-        <MessageInput />
+        <MessageInput replyToMessage={replyToMessage} />
       </div>
     </div>
   );
