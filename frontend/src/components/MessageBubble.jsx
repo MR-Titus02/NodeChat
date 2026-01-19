@@ -2,7 +2,11 @@ import { motion as Motion } from "framer-motion";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 
-/* Detect emoji-only messages (1–3 emojis) */
+const formatTime = (date) => {
+  const d = new Date(date);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
 const isEmojiOnlyMessage = (text = "") => {
   const trimmed = text.trim();
   if (!trimmed) return false;
@@ -33,26 +37,20 @@ function MessageBubble({ msg }) {
         dragElastic={0.2}
         onDragEnd={(e, info) => {
           const swipeDistance = info.offset.x;
-
-          // 👉 swipe right on OTHER user's message
-          if (!isMine && swipeDistance > 80) {
-            setReplyToMessage(msg);
-          }
-
-          // 👉 swipe left on YOUR message
-          if (isMine && swipeDistance < -80) {
-            setReplyToMessage(msg);
-          }
+          if (!isMine && swipeDistance > 80) setReplyToMessage(msg);
+          if (isMine && swipeDistance < -80) setReplyToMessage(msg);
         }}
         className={`
           chat-bubble
+          max-w-[85%] sm:max-w-[70%]
+          px-3 py-2
+          flex flex-col
           ${isMine ? "bg-cyan-600 text-white" : "bg-slate-800 text-slate-200"}
-          ${isEmojiOnly ? "px-4 py-3" : ""}
         `}
       >
-        {/* REPLIED MESSAGE PREVIEW */}
+        {/* REPLY PREVIEW */}
         {msg.replyTo && (
-          <div className="mb-2 px-2 py-1 rounded bg-black/20 border-l-4 border-cyan-400 text-xs text-slate-300">
+          <div className="mb-1 px-2 py-1 rounded bg-black/20 border-l-4 border-cyan-400 text-xs text-slate-300">
             <span className="block font-semibold text-cyan-300">
               Replying to
             </span>
@@ -62,24 +60,41 @@ function MessageBubble({ msg }) {
           </div>
         )}
 
+        {/* IMAGE */}
         {msg.image && (
           <img
             src={msg.image}
-            className="rounded-lg h-48 object-cover"
+            className="rounded-lg mb-1 max-h-60 object-cover"
           />
         )}
 
+        {/* TEXT */}
         {msg.text && (
           <p
             className={
               isSingleEmoji
-                ? "text-6xl md:text-8xl leading-none text-center"
-                : "mt-2 text-base"
+                ? "text-6xl leading-none text-center"
+                : "text-sm leading-relaxed break-words"
             }
           >
             {msg.text}
           </p>
         )}
+
+        {/* META ROW (WhatsApp style) */}
+        <div className="mt-1 flex justify-end items-center gap-1 text-[10px] text-white/70">
+          <span>{formatTime(msg.createdAt)}</span>
+
+          {isMine && (
+            <span
+              className={`leading-none ${
+                msg.seenAt ? "text-blue-500" : "text-white/50"
+              }`}
+            >
+              ✔✔
+            </span>
+          )}
+        </div>
       </Motion.div>
     </div>
   );

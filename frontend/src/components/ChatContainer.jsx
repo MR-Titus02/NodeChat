@@ -18,13 +18,14 @@ function ChatContainer() {
     unsubscribeFromMessages,
     replyToMessage,
     clearReplyToMessage,
+    markMessagesAsSeen,
   } = useChatStore();
 
   const { authUser } = useAuthStore();
   const chatRef = useRef(null);
   const isInitialLoad = useRef(true);
 
-  // 🔹 Fetch messages on chat switch
+  // 🔹 Fetch messages and subscribe to socket on chat switch
   useEffect(() => {
     if (!selectedUser) return;
 
@@ -45,17 +46,16 @@ function ChatContainer() {
     }
   }, [messages]);
 
-  // 🔹 Auto-scroll whenever a new message arrives (sent or received)
+  // 🔹 Auto-scroll on new message
   useEffect(() => {
     if (!chatRef.current || messages.length === 0) return;
 
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage) return;
 
-    // Always scroll on new message
     setTimeout(() => {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
-    }, 50); // delay to ensure DOM has rendered
+    }, 50);
   }, [messages]);
 
   // 🔹 Handle scroll-to-top for older messages
@@ -67,10 +67,50 @@ function ChatContainer() {
     const prevScrollHeight = chatRef.current.scrollHeight;
 
     fetchMessagesByUserId(selectedUser._id).then(() => {
-      // Maintain scroll position after prepending older messages
       chatRef.current.scrollTop = chatRef.current.scrollHeight - prevScrollHeight;
     });
   }, [selectedUser, fetchMessagesByUserId, hasMoreMessages, isMessagesLoading]);
+
+  // 🔹 Mark messages as seen ONLY when:
+  // 1️⃣ Tab is visible
+  // 2️⃣ User is near bottom of chat
+  useEffect(() => {
+    if (!selectedUser || messages.length === 0) return;
+
+const checkSeen = () => {
+  if (!selectedUser || !chatRef.current) return;
+
+  const scrollBottom =
+    chatRef.current.scrollHeight -
+    chatRef.current.scrollTop -
+    chatRef.current.clientHeight;
+
+  if (scrollBottom > 150 || document.visibilityState !== "visible") return;
+
+  // Only call PUT if there is at least one unseen message from the other user
+  const hasUnseen = messages.some(
+    (msg) => msg.senderId === selectedUser._id && !msg.seenAt
+  );
+  if (hasUnseen) {
+    markMessagesAsSeen(selectedUser._id);
+  }
+};
+
+
+    // Check on message change
+    checkSeen();
+
+    // Check on scroll
+    chatRef.current.addEventListener("scroll", checkSeen);
+
+    // Check when tab becomes visible
+    document.addEventListener("visibilitychange", checkSeen);
+
+    return () => {
+      chatRef.current?.removeEventListener("scroll", checkSeen);
+      document.removeEventListener("visibilitychange", checkSeen);
+    };
+  }, [messages, selectedUser, markMessagesAsSeen]);
 
   return (
     <div className="flex flex-col h-full min-h-0">

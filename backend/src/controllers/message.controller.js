@@ -207,3 +207,28 @@ export const getMessagesByUserIdPaginated = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+export const markMessagesAsSeen = async (req, res) => {
+  const loggedInUserId = req.user._id;
+  const { userId } = req.params; // chat partner
+
+  await Message.updateMany(
+    {
+      senderId: userId,
+      receiverId: loggedInUserId,
+      seenAt: null,
+    },
+    { $set: { seenAt: new Date() } }
+  );
+
+  // notify sender in real-time
+  const senderSocketId = getReceiverSocketId(userId);
+  if (senderSocketId) {
+    io.to(senderSocketId).emit("messagesSeen", {
+      by: loggedInUserId,
+    });
+  }
+
+  res.status(200).json({ success: true });
+};
+

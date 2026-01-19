@@ -11,8 +11,8 @@ export const useChatStore = create((set, get) => ({
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
-  messagesOffset: 0, // NEW: tracks how many messages have been loaded
-  hasMoreMessages: true, // NEW: indicates if there are older messages
+  messagesOffset: 0,
+  hasMoreMessages: true,
 
   // 🔊 sound
   isSoundEnabled: JSON.parse(localStorage.getItem("isSoundEnabled")) === true,
@@ -22,15 +22,19 @@ export const useChatStore = create((set, get) => ({
     set({ isSoundEnabled: !get().isSoundEnabled });
   },
 
-  // 🧭 UI state
+  // 🧭 UI
   setActiveTab: (tab) => set({ activeTab: tab }),
+
   setSelectedUser: (selectedUser) => {
-    set({ selectedUser });
-    // Reset messages when switching users
-    set({ messages: [], messagesOffset: 0, hasMoreMessages: true });
+    set({
+      selectedUser,
+      messages: [],
+      messagesOffset: 0,
+      hasMoreMessages: true,
+    });
   },
 
-  // 🔁 REPLY STATE (NEW)
+  // 🔁 reply
   replyToMessage: null,
   setReplyToMessage: (message) => set({ replyToMessage: message }),
   clearReplyToMessage: () => set({ replyToMessage: null }),
@@ -42,7 +46,10 @@ export const useChatStore = create((set, get) => ({
       const res = await axiosInstance.get("/messages/contacts");
       const data = res.data;
       const contactsArray =
-        data?.contacts ?? data?.users ?? data?.data ?? (Array.isArray(data) ? data : []);
+        data?.contacts ??
+        data?.users ??
+        data?.data ??
+        (Array.isArray(data) ? data : []);
       set({ allContacts: contactsArray });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load contacts");
@@ -57,7 +64,10 @@ export const useChatStore = create((set, get) => ({
       const res = await axiosInstance.get("/messages/chats");
       const data = res.data;
       const chatsArray =
-        data?.chats ?? data?.users ?? data?.data ?? (Array.isArray(data) ? data : []);
+        data?.chats ??
+        data?.users ??
+        data?.data ??
+        (Array.isArray(data) ? data : []);
       set({ chats: chatsArray });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load chats");
@@ -66,28 +76,10 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  // 💬 MESSAGES
-  // ---------------------------------------
-  // Old method (commented out)
-  /*
-  getMessagesByUserId: async (userId) => {
-    set({ isMessagesLoading: true });
-    try {
-      const res = await axiosInstance.get(`/messages/${userId}`);
-      const data =
-        res.data?.messages ?? (Array.isArray(res.data) ? res.data : []);
-      set({ messages: data });
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Something went wrong");
-    } finally {
-      set({ isMessagesLoading: false });
-    }
-  },
-  */
-
-  // NEW: Paginated message fetching
+  // 💬 messages (pagination)
   fetchMessagesByUserId: async (userId, reset = false) => {
     if (get().isMessagesLoading) return;
+
     if (reset) {
       set({ messages: [], messagesOffset: 0, hasMoreMessages: true });
     }
@@ -118,11 +110,13 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  // ✉️ send
   sendMessage: async (messageData) => {
     const { selectedUser } = get();
     const { authUser } = useAuthStore.getState();
 
     const tempId = `temp-${Date.now()}`;
+
     const optimisticMessage = {
       _id: tempId,
       senderId: authUser._id,
@@ -131,6 +125,7 @@ export const useChatStore = create((set, get) => ({
       image: messageData.image,
       replyTo: messageData.replyTo || null,
       createdAt: new Date().toISOString(),
+      seenAt: null,
       isOptimistic: true,
     };
 
@@ -157,15 +152,37 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
+  // 👁️ MARK AS SEEN (RECEIVER SIDE)
+markMessagesAsSeen: async (userId) => {
+  try {
+    await axiosInstance.put(`/messages/seen/${userId}`);
+
+    set((state) => ({
+      messages: state.messages.map((msg) =>
+        // ONLY update messages sent by the OTHER user
+        msg.senderId === userId && !msg.seenAt
+          ? { ...msg, seenAt: new Date() }
+          : msg
+      ),
+    }));
+  } catch (err) {
+    console.error("Failed to mark messages as seen", err);
+  }
+},
+
   // 🔌 sockets
   subscribeToMessages: () => {
     const { selectedUser, isSoundEnabled } = get();
     if (!selectedUser) return;
 
     const socket = useAuthStore.getState().socket;
+    const { authUser } = useAuthStore.getState();
     if (!socket) return;
 
     socket.off("newMessage");
+    socket.off("messagesSeen");
+
+    // 📩 new message
     socket.on("newMessage", (newMessage) => {
       if (String(newMessage.senderId) !== String(selectedUser._id)) return;
 
@@ -179,10 +196,28 @@ export const useChatStore = create((set, get) => ({
         audio.play().catch(() => {});
       }
     });
+
+    // 👁️ seen event (SENDER SIDE)
+    socket.on("messagesSeen", ({ by }) => {
+      set((state) => ({
+        messages: state.messages.map((msg) => {
+          if (
+            msg.senderId === authUser._id &&
+            msg.receiverId === by &&
+            !msg.seenAt
+          ) {
+            return { ...msg, seenAt: new Date() };
+          }
+          return msg;
+        }),
+      }));
+    });
   },
 
   unsubscribeFromMessages: () => {
     const socket = useAuthStore.getState().socket;
-    if (socket) socket.off("newMessage");
+    if (!socket) return;
+    socket.off("newMessage");
+    socket.off("messagesSeen");
   },
 }));
