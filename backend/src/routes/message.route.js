@@ -1,5 +1,5 @@
 import express from 'express';
-import { getAllContacts, getChatPartners, getMessagesByUserId, sendMessage, getMessagesByUserIdPaginated } from '../controllers/message.controller.js';
+import { getAllContacts, getChatPartners, getMessagesByUserId, sendMessage, getMessagesByUserIdPaginated, markMessagesAsSeen } from '../controllers/message.controller.js';
 import { protectRoute } from '../middleware/auth.middleware.js';
 import arcjetProtection from '../middleware/arcjet.middleware.js';
 
@@ -23,5 +23,6 @@ router.post('/send/:id', sendMessage);
 // router.get('/:id', getMessagesByUserId);
 
 router.get('/:id', getMessagesByUserIdPaginated);
+router.put("/seen/:userId", protectRoute, markMessagesAsSeen);
 
 export default router;

@@ -36,6 +36,13 @@ const messageSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
       },
+      delivered: {
+        type: Boolean,
+      },
+      seenAt: {
+        type: Date,
+        default: null,
+      }
     },
   },
   { timestamps: true }
