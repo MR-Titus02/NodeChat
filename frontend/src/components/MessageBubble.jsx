@@ -1,6 +1,7 @@
 import { motion as Motion } from "framer-motion";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
+import { useImageViewerStore } from "../store/useImageViewerStore";
 
 const formatTime = (date) => {
   const d = new Date(date);
@@ -24,10 +25,13 @@ const isEmojiOnlyMessage = (text = "") => {
 function MessageBubble({ msg }) {
   const { authUser } = useAuthStore();
   const { setReplyToMessage } = useChatStore();
+  const { openImage } = useImageViewerStore();
 
   const isMine = String(msg.senderId) === String(authUser._id);
   const isEmojiOnly = isEmojiOnlyMessage(msg.text);
   const isSingleEmoji = isEmojiOnly && msg.text?.trim().length <= 2;
+
+  const imageSrc = msg.image; // ✅ CORRECT FIELD
 
   return (
     <div className={`chat ${isMine ? "chat-end" : "chat-start"}`}>
@@ -61,15 +65,18 @@ function MessageBubble({ msg }) {
         )}
 
         {/* IMAGE */}
-        {msg.image && (
+        {imageSrc && (
           <img
-            src={msg.image}
-            className="rounded-lg mb-1 max-h-60 object-cover"
+            src={imageSrc}
+            alt=""
+            loading="lazy"
+            onClick={() => openImage(imageSrc)}
+            className="block cursor-pointer rounded-lg max-w-[220px] max-h-[300px] object-cover mb-1 hover:opacity-90"
           />
         )}
 
         {/* TEXT */}
-        {msg.text && (
+        {msg.text && msg.text.trim() !== "" && (
           <p
             className={
               isSingleEmoji
@@ -81,7 +88,7 @@ function MessageBubble({ msg }) {
           </p>
         )}
 
-        {/* META ROW (WhatsApp style) */}
+        {/* META ROW */}
         <div className="mt-1 flex justify-end items-center gap-1 text-[10px] text-white/70">
           <span>{formatTime(msg.createdAt)}</span>
 
