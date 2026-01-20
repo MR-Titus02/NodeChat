@@ -1,11 +1,19 @@
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import ChatHeader from "./ChatHeader";
 import NoChatHistoryPlaceholder from "./NoChatHistoryPlaceholder";
 import MessageInput from "./MessageInput";
 import MessagesLoadingSkeleton from "./MessagesLoadingSkeleton";
 import MessageBubble from "./MessageBubble";
+
+/* -------------------- helpers -------------------- */
+const formatDate = (date) =>
+  new Date(date).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 
 function ChatContainer() {
   const {
@@ -22,21 +30,25 @@ function ChatContainer() {
   } = useChatStore();
 
   const { authUser } = useAuthStore();
+
   const chatRef = useRef(null);
   const isInitialLoad = useRef(true);
+  const prevMessageCount = useRef(0);
 
-  // 🔹 Fetch messages and subscribe to socket on chat switch
+  const [activeDate, setActiveDate] = useState(null);
+
+  /* -------------------- fetch & socket -------------------- */
   useEffect(() => {
     if (!selectedUser) return;
 
     isInitialLoad.current = true;
-    fetchMessagesByUserId(selectedUser._id, true); // reset messages
+    fetchMessagesByUserId(selectedUser._id, true);
     subscribeToMessages();
 
     return () => unsubscribeFromMessages();
-  }, [selectedUser, fetchMessagesByUserId, subscribeToMessages, unsubscribeFromMessages]);
+  }, [selectedUser]);
 
-  // 🔹 Scroll to bottom on first load
+  /* -------------------- initial scroll -------------------- */
   useEffect(() => {
     if (!chatRef.current || messages.length === 0) return;
 
@@ -46,19 +58,29 @@ function ChatContainer() {
     }
   }, [messages]);
 
-  // 🔹 Auto-scroll on new message
+  /* -------------------- auto-scroll ONLY for new messages -------------------- */
   useEffect(() => {
-    if (!chatRef.current || messages.length === 0) return;
+    if (!chatRef.current) return;
 
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage) return;
+    const isNewMessage = messages.length > prevMessageCount.current;
 
-    setTimeout(() => {
-      chatRef.current.scrollTop = chatRef.current.scrollHeight;
-    }, 50);
+    if (isNewMessage) {
+      const scrollBottom =
+        chatRef.current.scrollHeight -
+        chatRef.current.scrollTop -
+        chatRef.current.clientHeight;
+
+      // auto-scroll only if user is near bottom
+      if (scrollBottom < 120) {
+        chatRef.current.scrollTop = chatRef.current.scrollHeight;
+      }
+    }
+
+    prevMessageCount.current = messages.length;
   }, [messages]);
 
-  // 🔹 Handle scroll-to-top for older messages
+  /* -------------------- pagination (scroll up) -------------------- */
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const handleScroll = useCallback(() => {
     if (!chatRef.current) return;
     if (chatRef.current.scrollTop !== 0) return;
@@ -67,56 +89,85 @@ function ChatContainer() {
     const prevScrollHeight = chatRef.current.scrollHeight;
 
     fetchMessagesByUserId(selectedUser._id).then(() => {
-      chatRef.current.scrollTop = chatRef.current.scrollHeight - prevScrollHeight;
+      requestAnimationFrame(() => {
+        chatRef.current.scrollTop =
+          chatRef.current.scrollHeight - prevScrollHeight;
+      });
     });
-  }, [selectedUser, fetchMessagesByUserId, hasMoreMessages, isMessagesLoading]);
+  }, [selectedUser, hasMoreMessages, isMessagesLoading]);
 
-  // 🔹 Mark messages as seen ONLY when:
-  // 1️⃣ Tab is visible
-  // 2️⃣ User is near bottom of chat
+  /* -------------------- sticky date (WhatsApp style) -------------------- */
+  useEffect(() => {
+    if (!chatRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setActiveDate(entry.target.dataset.date);
+          }
+        });
+      },
+      {
+        root: chatRef.current,
+        threshold: 0.6,
+      }
+    );
+
+    const dateEls = chatRef.current.querySelectorAll("[data-date]");
+    dateEls.forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, [messages]);
+
+  /* -------------------- seen logic -------------------- */
   useEffect(() => {
     if (!selectedUser || messages.length === 0) return;
 
-const checkSeen = () => {
-  if (!selectedUser || !chatRef.current) return;
+    const checkSeen = () => {
+      if (!chatRef.current) return;
 
-  const scrollBottom =
-    chatRef.current.scrollHeight -
-    chatRef.current.scrollTop -
-    chatRef.current.clientHeight;
+      const scrollBottom =
+        chatRef.current.scrollHeight -
+        chatRef.current.scrollTop -
+        chatRef.current.clientHeight;
 
-  if (scrollBottom > 150 || document.visibilityState !== "visible") return;
+      if (scrollBottom > 150 || document.visibilityState !== "visible") return;
 
-  // Only call PUT if there is at least one unseen message from the other user
-  const hasUnseen = messages.some(
-    (msg) => msg.senderId === selectedUser._id && !msg.seenAt
-  );
-  if (hasUnseen) {
-    markMessagesAsSeen(selectedUser._id);
-  }
-};
+      const hasUnseen = messages.some(
+        (msg) => msg.senderId === selectedUser._id && !msg.seenAt
+      );
 
+      if (hasUnseen) {
+        markMessagesAsSeen(selectedUser._id);
+      }
+    };
 
-    // Check on message change
     checkSeen();
-
-    // Check on scroll
     chatRef.current.addEventListener("scroll", checkSeen);
-
-    // Check when tab becomes visible
     document.addEventListener("visibilitychange", checkSeen);
 
     return () => {
       chatRef.current?.removeEventListener("scroll", checkSeen);
       document.removeEventListener("visibilitychange", checkSeen);
     };
-  }, [messages, selectedUser, markMessagesAsSeen]);
+  }, [messages, selectedUser]);
 
+  /* -------------------- render -------------------- */
   return (
     <div className="flex flex-col h-full min-h-0">
       <ChatHeader />
 
-      {/* Messages */}
+      {/* sticky date */}
+      {activeDate && (
+        <div className="sticky top-0 z-10 flex justify-center pointer-events-none">
+          <div className="mt-2 px-3 py-1 text-xs bg-slate-800/90 text-slate-200 rounded-full shadow">
+            {activeDate}
+          </div>
+        </div>
+      )}
+
+      {/* messages */}
       <div
         ref={chatRef}
         className="flex-1 min-h-0 overflow-y-auto px-4 md:px-6 py-4"
@@ -126,16 +177,37 @@ const checkSeen = () => {
           <MessagesLoadingSkeleton />
         ) : messages.length > 0 ? (
           <div className="max-w-3xl mx-auto space-y-4">
-            {messages.map((msg) => (
-              <MessageBubble key={msg._id} msg={msg} />
-            ))}
+            {messages.map((msg, index) => {
+              const prevMsg = messages[index - 1];
+              const showDate =
+                !prevMsg ||
+                formatDate(prevMsg.createdAt) !==
+                  formatDate(msg.createdAt);
+
+              return (
+                <div key={msg._id}>
+                  {showDate && (
+                    <div
+                      data-date={formatDate(msg.createdAt)}
+                      className="my-3 flex justify-center"
+                    >
+                      <span className="px-3 py-1 text-xs bg-slate-700 text-slate-300 rounded-full">
+                        {formatDate(msg.createdAt)}
+                      </span>
+                    </div>
+                  )}
+
+                  <MessageBubble msg={msg} />
+                </div>
+              );
+            })}
           </div>
         ) : selectedUser ? (
           <NoChatHistoryPlaceholder name={selectedUser.fullName} />
         ) : null}
       </div>
 
-      {/* Reply preview */}
+      {/* reply preview */}
       {replyToMessage && (
         <div className="px-4 py-2 bg-slate-800 border-t border-slate-700 flex items-center justify-between">
           <div className="text-sm text-slate-300 truncate">
@@ -159,7 +231,7 @@ const checkSeen = () => {
         </div>
       )}
 
-      {/* Input */}
+      {/* input */}
       <div className="flex-shrink-0">
         <MessageInput replyToMessage={replyToMessage} />
       </div>
