@@ -7,6 +7,8 @@ import { useAuthStore } from './store/useAuthStore.js'
 import { useEffect } from 'react'
 import PageLoader from './components/PageLoader.jsx'
 import { Toaster } from 'react-hot-toast'
+import ImageViewer from "./components/ImageViewer";
+
 
 function App() {
     const { checkAuth, isCheckingAuth, authUser} = useAuthStore();
@@ -38,6 +40,8 @@ function App() {
       </Routes>
 
       <Toaster />
+
+      <ImageViewer />
     </div>
   )
 } 
