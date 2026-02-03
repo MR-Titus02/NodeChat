@@ -1,16 +1,46 @@
-import { useEffect } from "react";
+import { useMemo, useEffect } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import { XIcon } from "lucide-react";
+import { useCurrentTime } from "../hooks/useCurrentTime";
 
 function ChatHeader() {
   const { selectedUser, setSelectedUser } = useChatStore();
-  const { onlineUsers } = useAuthStore();
-  const isOnline = onlineUsers.map(String).includes(String(selectedUser._id));
+  const { onlineUsers, lastSeenMap } = useAuthStore();
 
+  const now = useCurrentTime();
+  const userId = String(selectedUser._id);
+
+  const isOnline = useMemo(
+    () => onlineUsers.map(String).includes(userId),
+    [onlineUsers, userId]
+  );
+
+  const lastSeen = useMemo(
+    () => lastSeenMap?.[userId] || selectedUser.lastSeen,
+    [lastSeenMap, userId, selectedUser.lastSeen]
+  );
+
+  const statusText = useMemo(() => {
+    if (isOnline) return "Online";
+    if (!lastSeen) return "Offline";
+
+    const diff = now - new Date(lastSeen).getTime();
+    const mins = Math.floor(diff / 60000);
+
+    if (mins < 1) return "Last seen just now";
+    if (mins < 60) return `Last seen ${mins} min ago`;
+
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `Last seen ${hours} hours ago`;
+
+    return `Last seen ${new Date(lastSeen).toLocaleDateString()}`;
+  }, [isOnline, lastSeen, now]);
+
+  // ESC key handler
   useEffect(() => {
-    const handleEscKey = (event) => {
-      if (event.key === "Escape") setSelectedUser(null);
+    const handleEscKey = (e) => {
+      if (e.key === "Escape") setSelectedUser(null);
     };
     window.addEventListener("keydown", handleEscKey);
     return () => window.removeEventListener("keydown", handleEscKey);
@@ -28,17 +58,17 @@ function ChatHeader() {
             />
           </div>
         </div>
+
         <div className="overflow-hidden">
           <h3 className="text-slate-200 font-medium text-sm md:text-base truncate">
             {selectedUser.fullName}
           </h3>
           <p className="text-slate-400 text-xs md:text-sm truncate">
-            {isOnline ? "Online" : "Offline"}
+            {statusText}
           </p>
         </div>
       </div>
 
-      {/* Close button: only visible on mobile overlay */}
       <button
         onClick={() => setSelectedUser(null)}
         className="md:hidden absolute top-2 right-2 bg-slate-800/70 hover:bg-slate-700 text-slate-200 rounded-full p-2 flex items-center justify-center"

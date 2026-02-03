@@ -1,21 +1,22 @@
 import { create } from "zustand";
 import { axiosInstance } from "../lib/axios.js";
 import { toast } from "react-hot-toast";
-import { io } from "socket.io-client"
+import { io } from "socket.io-client";
 
-const BASE_URL = import.meta.env.MODE === "development" ? "http://localhost:3000" : "/";
+const BASE_URL =
+  import.meta.env.MODE === "development" ? "http://localhost:3000" : "/";
 
-export const useAuthStore = create((set,get) => ({
-    // initialize with the user object stored in localStorage (if any)
-    authUser: JSON.parse(localStorage.getItem("authUser")) || null,
-    isCheckingAuth : true,
-    isSigningUp: false,
-    isLoggingIn: false,
-    isUpdatingProfile: false,
-    socket: null,
-    onlineUsers: [],
+export const useAuthStore = create((set, get) => ({
+  // initialize with the user object stored in localStorage (if any)
+  authUser: JSON.parse(localStorage.getItem("authUser")) || null,
+  isCheckingAuth: true,
+  isSigningUp: false,
+  isLoggingIn: false,
+  isUpdatingProfile: false,
+  socket: null,
+  onlineUsers: [],
 
-   checkAuth: async () => {
+  checkAuth: async () => {
     try {
       const res = await axiosInstance.get("/auth/check");
       const user = res?.data?.user ?? res?.data ?? null;
@@ -50,12 +51,12 @@ export const useAuthStore = create((set,get) => ({
     }
   },
 
-    login: async (data) => {
+  login: async (data) => {
     set({ isLoggingIn: true });
     try {
       const res = await axiosInstance.post("/auth/login", data);
       const user = res?.data?.user ?? res?.data ?? null;
-  
+
       set({ authUser: user });
       if (user) localStorage.setItem("authUser", JSON.stringify(user));
       toast.success("Logged in successfully");
@@ -67,7 +68,7 @@ export const useAuthStore = create((set,get) => ({
     }
   },
 
-    logout: async () => {
+  logout: async () => {
     try {
       await axiosInstance.post("/auth/logout");
       set({ authUser: null });
@@ -89,7 +90,8 @@ export const useAuthStore = create((set,get) => ({
       const res = await axiosInstance.put("/auth/update-profile", data);
       const updatedUser = res?.data?.user ?? res?.data ?? null;
       set({ authUser: updatedUser });
-      if (updatedUser) localStorage.setItem("authUser", JSON.stringify(updatedUser));
+      if (updatedUser)
+        localStorage.setItem("authUser", JSON.stringify(updatedUser));
       toast.success("Profile updated successfully");
     } catch (error) {
       console.log("Error in update profile:", error);
@@ -100,31 +102,50 @@ export const useAuthStore = create((set,get) => ({
   },
 
   connectSocket: () => {
-    const { authUser } = get()
-    if (!authUser || get().socket?.connected) return
+    const { authUser, socket } = get();
+    if (!authUser || socket?.connected) return;
 
-    const socket = io(BASE_URL, {
-      withCredentials: true // this ensures cookies are sent
-    })
+    const newSocket = io(BASE_URL, {
+      withCredentials: true,
+    });
 
-    socket.connect()
+    newSocket.connect();
+    set({ socket: newSocket });
 
-    set({socket})
+    // --- ONLINE USERS LIST ---
+    newSocket.off("getOnlineUsers");
+    newSocket.on("getOnlineUsers", (userIds) => {
+      set({ onlineUsers: userIds.map(String) });
+    });
 
-    // prevent duplicate handlers then listen for online users event
-    socket.off("getOnlineUsers")
-    socket.on("getOnlineUsers", (userIds) => {
-      // normalize IDs to strings for consistent comparisons across components
-      set({onlineUsers: userIds.map(String)})
-    })
+    // --- USER ONLINE ---
+    newSocket.off("user:online");
+    newSocket.on("user:online", (userId) => {
+      set((state) => ({
+        onlineUsers: state.onlineUsers.includes(String(userId))
+          ? state.onlineUsers
+          : [...state.onlineUsers, String(userId)],
+      }));
+    });
+
+    // --- USER OFFLINE + LAST SEEN ---
+    newSocket.off("user:offline");
+    newSocket.on("user:offline", ({ userId, lastSeen }) => {
+      set((state) => ({
+        onlineUsers: state.onlineUsers.filter((id) => id !== String(userId)),
+        lastSeenMap: {
+          ...state.lastSeenMap,
+          [String(userId)]: lastSeen,
+        },
+      }));
+    });
   },
 
   disconnectSocket: () => {
     try {
-      if (get().socket) get().socket.disconnect()
+      if (get().socket) get().socket.disconnect();
     } finally {
-      set({ socket: null, onlineUsers: [] })
+      set({ socket: null, onlineUsers: [] });
     }
-  }
-  
+  },
 }));
