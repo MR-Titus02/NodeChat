@@ -1,6 +1,7 @@
 import { motion as Motion } from "framer-motion";
 import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
+import { IoCheckmarkDone } from "react-icons/io5";
 
 const formatTime = (date) => {
   const d = new Date(date);
@@ -87,11 +88,17 @@ function MessageBubble({ msg }) {
 
           {isMine && (
             <span
-              className={`leading-none ${
-                msg.seenAt ? "text-blue-500" : "text-white/50"
+              className={`ml-1 text-base flex items-center justify-center rounded-full transition-all duration-200 ${
+                msg.seenAt
+                  ? "bg-teal-400/25 ring-1 ring-teal-300/50"
+                  : "bg-white/10"
               }`}
             >
-              ✔✔
+              <IoCheckmarkDone
+                className={`${
+                  msg.seenAt ? "text-teal-300" : "text-gray-300"
+                } !text-opacity-100`}
+              />
             </span>
           )}
         </div>
