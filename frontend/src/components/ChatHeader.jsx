@@ -6,7 +6,7 @@ import { useCurrentTime } from "../hooks/useCurrentTime";
 
 function ChatHeader() {
   const { selectedUser, setSelectedUser } = useChatStore();
-  const { onlineUsers, lastSeenMap } = useAuthStore();
+  const { onlineUsers, lastSeenMap, typingUsers } = useAuthStore();
 
   const now = useCurrentTime();
   const userId = String(selectedUser._id);
@@ -21,7 +21,10 @@ function ChatHeader() {
     [lastSeenMap, userId, selectedUser.lastSeen]
   );
 
+const isTyping = useMemo(() => typingUsers?.[userId] ?? false, [typingUsers, userId]);
+
   const statusText = useMemo(() => {
+    if (isTyping) return "Typing...";
     if (isOnline) return "Online";
     if (!lastSeen) return "Offline";
 
@@ -35,7 +38,7 @@ function ChatHeader() {
     if (hours < 24) return `Last seen ${hours} hours ago`;
 
     return `Last seen ${new Date(lastSeen).toLocaleDateString()}`;
-  }, [isOnline, lastSeen, now]);
+  }, [isTyping, isOnline, lastSeen, now]);
 
   // ESC key handler
   useEffect(() => {
