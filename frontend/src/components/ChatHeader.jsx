@@ -3,7 +3,9 @@ import { useChatStore } from "../store/useChatStore";
 import { useAuthStore } from "../store/useAuthStore";
 import { XIcon } from "lucide-react";
 import { useCurrentTime } from "../hooks/useCurrentTime";
-import { Motion, AnimatePresence } from "framer-motion";
+// eslint-disable-next-line no-unused-vars
+import { motion, AnimatePresence } from "framer-motion";
+
 
 function ChatHeader() {
   const { selectedUser, setSelectedUser } = useChatStore();
@@ -95,14 +97,14 @@ const isTyping = useMemo(() => typingUsers?.[userId] ?? false, [typingUsers, use
       {/* ✅ Modal Preview */}
       <AnimatePresence>
         {isPreviewOpen && (
-          <Motion.div
+          <motion.div
             className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setIsPreviewOpen(false)}
           >
-            <Motion.img
+            <motion.img
               src={profileImg}
               alt={selectedUser.fullName}
               className="max-w-[90vw] max-h-[75vh] rounded-lg object-cover cursor-pointer"
@@ -112,7 +114,7 @@ const isTyping = useMemo(() => typingUsers?.[userId] ?? false, [typingUsers, use
               transition={{ type: "spring", stiffness: 260, damping: 20 }}
               onClick={(e) => e.stopPropagation()} // prevent closing modal on image click
             />
-          </Motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </>
