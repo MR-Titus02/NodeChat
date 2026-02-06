@@ -44,19 +44,24 @@ export const sendMessage = async (req, res) => {
     const senderId = req.user._id;
 
     // Validation
-    if (!text && !image)
-      return res
-        .status(400)
-        .json({ message: "Message text or image is required" });
+    if (!text && !image) {
+      return res.status(400).json({
+        message: "Message text or image is required",
+      });
+    }
 
-    if (senderId.equals(receiverId))
-      return res
-        .status(400)
-        .json({ message: "Cannot send message to yourself" });
+    if (senderId.equals(receiverId)) {
+      return res.status(400).json({
+        message: "Cannot send message to yourself",
+      });
+    }
 
     const receiverExists = await User.exists({ _id: receiverId });
-    if (!receiverExists)
-      return res.status(404).json({ message: "Receiver not found" });
+    if (!receiverExists) {
+      return res.status(404).json({
+        message: "Receiver not found",
+      });
+    }
 
     // Upload image if present
     let imageUrl;
@@ -65,7 +70,7 @@ export const sendMessage = async (req, res) => {
       imageUrl = uploadResponse.secure_url;
     }
 
-    // Save message (WITH REPLY SUPPORT)
+    // Save message
     const newMessage = new Message({
       senderId,
       receiverId,
@@ -81,30 +86,34 @@ export const sendMessage = async (req, res) => {
     });
 
     await newMessage.save();
+
     const savedMessage = {
-  ...newMessage.toObject(),
-  replyTo: newMessage.replyTo || null,
-};
+      ...newMessage.toObject(),
+      replyTo: newMessage.replyTo || null,
+    };
 
     // Real-time socket delivery
-    const receiverSocketId = getReceiverSocketId(receiverId);
+    const receiverSocketId = getReceiverSocketId(receiverId.toString());
+
     if (receiverSocketId) {
+      // User is ONLINE → deliver via socket
       io.to(receiverSocketId).emit("newMessage", savedMessage);
-    }
+    } else {
+      // User is OFFLINE → Telegram alert (ADMIN only)
+      const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
 
-    // Telegram alert (unchanged)
-    const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
-    if (receiverId.toString() === ADMIN_USER_ID) {
-      const senderName =
-        req.user?.fullName || req.user?.username || "Unknown";
+      if (receiverId.toString() === ADMIN_USER_ID) {
+        const senderName =
+          req.user?.fullName || req.user?.username || "Unknown";
 
-      const telegramText = `
+        const telegramText = `
 📩 *New Message*
 From: ${senderName}
 ${text || "📷 Image"}
-      `.trim();
+        `.trim();
 
-      await sendTelegramMessage(telegramText);
+        await sendTelegramMessage(telegramText);
+      }
     }
 
     return res.status(201).json({
