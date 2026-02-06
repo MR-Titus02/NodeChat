@@ -1,6 +1,7 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import useKeyboardSound from "../hooks/useKeyboardSound";
 import { useChatStore } from "../store/useChatStore";
+import { useAuthStore } from "../store/useAuthStore";
 import toast from "react-hot-toast";
 import { ImageIcon, SendIcon, XIcon, SmileIcon } from "lucide-react";
 import EmojiPicker from "./EmojiPicker";
@@ -10,16 +11,20 @@ function MessageInput() {
   const {
     sendMessage,
     isSoundEnabled,
-    replyToMessage,       // ✅ message being replied to
-    clearReplyToMessage,  // ✅ function to clear reply preview
+    replyToMessage,
+    clearReplyToMessage,
+    selectedUser,
   } = useChatStore();
+
+  const { emitTyping } = useAuthStore();
 
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
-  const fileInputRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
 
   // ------------------ FOCUS INPUT WHEN REPLYING ------------------
   useEffect(() => {
@@ -28,6 +33,26 @@ function MessageInput() {
     }
   }, [replyToMessage]);
 
+  // ------------------ TYPING INDICATOR ------------------
+  const handleTyping = useCallback(
+    (value) => {
+      setText(value);
+      if (!selectedUser) return;
+
+      // Emit typing
+      emitTyping(selectedUser._id, true);
+
+      // Clear previous timeout
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+      // Stop typing after 1.5s of inactivity
+      typingTimeoutRef.current = setTimeout(() => {
+        emitTyping(selectedUser._id, false);
+      }, 1500);
+    },
+    [selectedUser, emitTyping]
+  );
+
   // ------------------ SEND MESSAGE ------------------
   const handleSendMessage = (e) => {
     e.preventDefault();
@@ -35,7 +60,6 @@ function MessageInput() {
 
     if (isSoundEnabled) playRandomKeyStrokeSound();
 
-    // Include replyTo in the payload if replying to a message
     sendMessage({
       text: text.trim(),
       image: imagePreview,
@@ -48,13 +72,15 @@ function MessageInput() {
         : null,
     });
 
-    // Clear input and reply preview
     setText("");
     setImagePreview(null);
     setShowEmojiPicker(false);
     clearReplyToMessage();
-
     if (fileInputRef.current) fileInputRef.current.value = "";
+
+    // Stop typing immediately after sending
+    if (selectedUser) emitTyping(selectedUser._id, false);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
   };
 
   // ------------------ EMOJI PICKER ------------------
@@ -68,7 +94,6 @@ function MessageInput() {
     const updatedText = text.slice(0, start) + emoji + text.slice(end);
     setText(updatedText);
 
-    // Restore cursor position
     requestAnimationFrame(() => {
       input.focus();
       input.selectionStart = input.selectionEnd = start + emoji.length;
@@ -129,27 +154,16 @@ function MessageInput() {
         onSubmit={handleSendMessage}
         className="max-w-3xl mx-auto flex items-center gap-2"
       >
-        {/* TEXT INPUT */}
         <input
           ref={inputRef}
           type="text"
           value={text}
           onChange={(e) => {
-            setText(e.target.value);
+            handleTyping(e.target.value);
             if (isSoundEnabled) playRandomKeyStrokeSound();
           }}
           placeholder="Type your message..."
-          className="
-            flex-1
-            bg-slate-800/60
-            border border-slate-700/50
-            rounded-lg
-            px-3
-            py-2
-            text-[16px]
-            text-white
-            focus:outline-none
-          "
+          className="flex-1 bg-slate-800/60 border border-slate-700/50 rounded-lg px-3 py-2 text-[16px] text-white focus:outline-none"
         />
 
         {/* EMOJI BUTTON */}
@@ -181,17 +195,7 @@ function MessageInput() {
         <button
           type="submit"
           disabled={!text.trim() && !imagePreview}
-          className="
-            flex-shrink-0
-            rounded-lg
-            bg-gradient-to-r
-            from-cyan-500
-            to-cyan-600
-            px-4
-            py-2
-            text-white
-            disabled:opacity-50
-          "
+          className="flex-shrink-0 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 px-4 py-2 text-white disabled:opacity-50"
         >
           <SendIcon className="w-5 h-5" />
         </button>

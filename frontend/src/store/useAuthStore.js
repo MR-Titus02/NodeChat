@@ -7,7 +7,6 @@ const BASE_URL =
   import.meta.env.MODE === "development" ? "http://localhost:3000" : "/";
 
 export const useAuthStore = create((set, get) => ({
-  // initialize with the user object stored in localStorage (if any)
   authUser: JSON.parse(localStorage.getItem("authUser")) || null,
   isCheckingAuth: true,
   isSigningUp: false,
@@ -15,6 +14,8 @@ export const useAuthStore = create((set, get) => ({
   isUpdatingProfile: false,
   socket: null,
   onlineUsers: [],
+  lastSeenMap: {},       // { userId: lastSeen }
+  typingUsers: {},       // { userId: boolean }
 
   checkAuth: async () => {
     try {
@@ -23,7 +24,6 @@ export const useAuthStore = create((set, get) => ({
       set({ authUser: user });
       if (user) {
         localStorage.setItem("authUser", JSON.stringify(user));
-        // ensure socket connects when auth restored (e.g., page reload)
         get().connectSocket();
       } else localStorage.removeItem("authUser");
     } catch (error) {
@@ -56,7 +56,6 @@ export const useAuthStore = create((set, get) => ({
     try {
       const res = await axiosInstance.post("/auth/login", data);
       const user = res?.data?.user ?? res?.data ?? null;
-
       set({ authUser: user });
       if (user) localStorage.setItem("authUser", JSON.stringify(user));
       toast.success("Logged in successfully");
@@ -79,8 +78,11 @@ export const useAuthStore = create((set, get) => ({
       toast.error(error.response?.data?.message || "Logout failed");
       console.log("Logout Error:", error);
     } finally {
-      // nothing to keep true here; ensure flags cleared
-      set({ isLoggingIn: false, isSigningUp: false, isUpdatingProfile: false });
+      set({
+        isLoggingIn: false,
+        isSigningUp: false,
+        isUpdatingProfile: false,
+      });
     }
   },
 
@@ -101,14 +103,12 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  // ----------------- SOCKET -----------------
   connectSocket: () => {
     const { authUser, socket } = get();
     if (!authUser || socket?.connected) return;
 
-    const newSocket = io(BASE_URL, {
-      withCredentials: true,
-    });
-
+    const newSocket = io(BASE_URL, { withCredentials: true });
     newSocket.connect();
     set({ socket: newSocket });
 
@@ -133,19 +133,36 @@ export const useAuthStore = create((set, get) => ({
     newSocket.on("user:offline", ({ userId, lastSeen }) => {
       set((state) => ({
         onlineUsers: state.onlineUsers.filter((id) => id !== String(userId)),
-        lastSeenMap: {
-          ...state.lastSeenMap,
-          [String(userId)]: lastSeen,
-        },
+        lastSeenMap: { ...state.lastSeenMap, [String(userId)]: lastSeen },
       }));
     });
+
+    // --- TYPING INDICATOR ---
+    newSocket.off("typing");
+newSocket.on("typing", ({ fromUserId, isTyping }) => {
+    set((state) => ({
+      typingUsers: { ...state.typingUsers, [String(fromUserId)]: isTyping },
+    }));
+});
+  },
+
+  // Emit typing status
+  emitTyping: (toUserId, isTyping) => {
+    const { socket, authUser } = get();
+    if (!socket || !authUser) return;
+    socket.emit("typing", { toUserId, isTyping });
   },
 
   disconnectSocket: () => {
     try {
       if (get().socket) get().socket.disconnect();
     } finally {
-      set({ socket: null, onlineUsers: [] });
+      set({
+        socket: null,
+        onlineUsers: [],
+        lastSeenMap: {},
+        typingUsers: {},
+      });
     }
   },
 }));
