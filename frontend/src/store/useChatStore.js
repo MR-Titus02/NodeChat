@@ -2,55 +2,117 @@ import { create } from "zustand";
 import { axiosInstance } from "../lib/axios";
 import toast from "react-hot-toast";
 import { useAuthStore } from "./useAuthStore";
+import { fetchWithCache, invalidateApiCache } from "../lib/apiCache";
+
+const CONTACTS_CACHE_TTL_MS = 60_000;
+const CHATS_CACHE_TTL_MS = 20_000;
+const MESSAGES_CACHE_TTL_MS = 15_000;
+
+const normalizeCollection = (data, primaryKey) =>
+  data?.[primaryKey] ??
+  data?.users ??
+  data?.data ??
+  (Array.isArray(data) ? data : []);
+
+const isFresh = (timestamp, ttlMs) =>
+  typeof timestamp === "number" && Date.now() - timestamp < ttlMs;
+
+const buildMessagesCacheKey = (viewerId, userId, params) =>
+  `messages:${viewerId}:${userId}:${params.toString()}`;
+
+const getConversationSnapshotKey = (viewerId, userId) =>
+  `${viewerId}:${userId}`;
+
+const invalidateConversationCache = (viewerId, userId) => {
+  invalidateApiCache(`messages:${viewerId}:${userId}:`);
+  invalidateApiCache(`messages:${userId}:${viewerId}:`);
+};
 
 export const useChatStore = create((set, get) => ({
   allContacts: [],
+  contactsFetchedAt: 0,
   chats: [],
+  chatsFetchedAt: 0,
   messages: [],
+  conversationSnapshots: {},
   activeTab: "chats",
   selectedUser: null,
   isUsersLoading: false,
   isMessagesLoading: false,
-  messagesOffset: 0,
+  oldestMessageCursor: null,
   hasMoreMessages: true,
 
-  // 🔊 sound
   isSoundEnabled: JSON.parse(localStorage.getItem("isSoundEnabled")) === true,
 
   toggleSound: () => {
-    localStorage.setItem("isSoundEnabled", !get().isSoundEnabled);
-    set({ isSoundEnabled: !get().isSoundEnabled });
+    const nextValue = !get().isSoundEnabled;
+    localStorage.setItem("isSoundEnabled", nextValue);
+    set({ isSoundEnabled: nextValue });
   },
 
-  // 🧭 UI
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   setSelectedUser: (selectedUser) => {
+    if (!selectedUser) {
+      set({
+        selectedUser: null,
+        messages: [],
+        oldestMessageCursor: null,
+        hasMoreMessages: true,
+        replyToMessage: null,
+      });
+      return;
+    }
+
+    const authUserId = useAuthStore.getState().authUser?._id;
+    const snapshotKey = authUserId
+      ? getConversationSnapshotKey(authUserId, selectedUser._id)
+      : null;
+    const snapshot = snapshotKey
+      ? get().conversationSnapshots[snapshotKey]
+      : null;
+
+    if (snapshot && isFresh(snapshot.fetchedAt, MESSAGES_CACHE_TTL_MS)) {
+      set({
+        selectedUser,
+        messages: snapshot.messages,
+        oldestMessageCursor: snapshot.oldestMessageCursor,
+        hasMoreMessages: snapshot.hasMoreMessages,
+      });
+      return;
+    }
+
     set({
       selectedUser,
       messages: [],
-      messagesOffset: 0,
+      oldestMessageCursor: null,
       hasMoreMessages: true,
     });
   },
 
-  // 🔁 reply
   replyToMessage: null,
   setReplyToMessage: (message) => set({ replyToMessage: message }),
   clearReplyToMessage: () => set({ replyToMessage: null }),
 
-  // 👥 contacts
   getAllContacts: async () => {
+    const { allContacts, contactsFetchedAt } = get();
+    if (allContacts.length > 0 && isFresh(contactsFetchedAt, CONTACTS_CACHE_TTL_MS)) {
+      return;
+    }
+
     set({ isUsersLoading: true });
     try {
-      const res = await axiosInstance.get("/messages/contacts");
-      const data = res.data;
-      const contactsArray =
-        data?.contacts ??
-        data?.users ??
-        data?.data ??
-        (Array.isArray(data) ? data : []);
-      set({ allContacts: contactsArray });
+      const authUserId = useAuthStore.getState().authUser?._id ?? "guest";
+      const data = await fetchWithCache(
+        `contacts:${authUserId}`,
+        async () => {
+          const res = await axiosInstance.get("/messages/contacts");
+          return res.data;
+        },
+        { ttlMs: CONTACTS_CACHE_TTL_MS }
+      );
+      const contactsArray = normalizeCollection(data, "contacts");
+      set({ allContacts: contactsArray, contactsFetchedAt: Date.now() });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load contacts");
     } finally {
@@ -59,16 +121,24 @@ export const useChatStore = create((set, get) => ({
   },
 
   getMyChatPartners: async () => {
+    const { chats, chatsFetchedAt } = get();
+    if (chats.length > 0 && isFresh(chatsFetchedAt, CHATS_CACHE_TTL_MS)) {
+      return;
+    }
+
     set({ isUsersLoading: true });
     try {
-      const res = await axiosInstance.get("/messages/chats");
-      const data = res.data;
-      const chatsArray =
-        data?.chats ??
-        data?.users ??
-        data?.data ??
-        (Array.isArray(data) ? data : []);
-      set({ chats: chatsArray });
+      const authUserId = useAuthStore.getState().authUser?._id ?? "guest";
+      const data = await fetchWithCache(
+        `chats:${authUserId}`,
+        async () => {
+          const res = await axiosInstance.get("/messages/chats");
+          return res.data;
+        },
+        { ttlMs: CHATS_CACHE_TTL_MS }
+      );
+      const chatsArray = normalizeCollection(data, "chats");
+      set({ chats: chatsArray, chatsFetchedAt: Date.now() });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load chats");
     } finally {
@@ -76,32 +146,72 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  // 💬 messages (pagination)
   fetchMessagesByUserId: async (userId, reset = false) => {
     if (get().isMessagesLoading) return;
 
-    if (reset) {
-      set({ messages: [], messagesOffset: 0, hasMoreMessages: true });
+    const authUserId = useAuthStore.getState().authUser?._id ?? "guest";
+    const snapshotKey = getConversationSnapshotKey(authUserId, userId);
+    const snapshot = get().conversationSnapshots[snapshotKey];
+
+    if (reset && snapshot && isFresh(snapshot.fetchedAt, MESSAGES_CACHE_TTL_MS)) {
+      set({
+        messages: snapshot.messages,
+        oldestMessageCursor: snapshot.oldestMessageCursor,
+        hasMoreMessages: snapshot.hasMoreMessages,
+      });
+      return;
     }
 
-    const { messagesOffset, messages, hasMoreMessages } = get();
+    if (reset) {
+      set({ messages: [], oldestMessageCursor: null, hasMoreMessages: true });
+    }
+
+    const { messages, hasMoreMessages, oldestMessageCursor } = get();
     if (!hasMoreMessages) return;
 
     set({ isMessagesLoading: true });
 
     try {
-      const res = await axiosInstance.get(
-        `/messages/${userId}?limit=50&offset=${reset ? 0 : messagesOffset}`
-      );
+      const params = new URLSearchParams({ limit: "50" });
 
-      const newMessages = res.data?.messages ?? [];
-      const fetchedCount = res.data?.fetchedCount ?? newMessages.length;
-      const hasMore = res.data?.hasMore ?? fetchedCount === 50;
+      if (!reset && oldestMessageCursor?._id && oldestMessageCursor?.createdAt) {
+        params.set("before", oldestMessageCursor.createdAt);
+        params.set("beforeId", oldestMessageCursor._id);
+      }
+
+      const data = await fetchWithCache(
+        buildMessagesCacheKey(authUserId, userId, params),
+        async () => {
+          const res = await axiosInstance.get(`/messages/${userId}?${params}`);
+          return res.data;
+        },
+        { ttlMs: MESSAGES_CACHE_TTL_MS }
+      );
+      const newMessages = data?.messages ?? [];
+      const hasMore = data?.hasMore ?? newMessages.length === 50;
+
+      const nextCursor =
+        data?.nextCursor ??
+        (newMessages.length > 0
+          ? {
+              _id: newMessages[0]._id,
+              createdAt: newMessages[0].createdAt,
+            }
+          : oldestMessageCursor);
 
       set({
         messages: reset ? newMessages : [...newMessages, ...messages],
-        messagesOffset: messagesOffset + fetchedCount,
+        oldestMessageCursor: nextCursor,
         hasMoreMessages: hasMore,
+        conversationSnapshots: {
+          ...get().conversationSnapshots,
+          [snapshotKey]: {
+            messages: reset ? newMessages : [...newMessages, ...messages],
+            oldestMessageCursor: nextCursor,
+            hasMoreMessages: hasMore,
+            fetchedAt: Date.now(),
+          },
+        },
       });
     } catch (error) {
       toast.error(error.response?.data?.message || "Failed to load messages");
@@ -110,7 +220,6 @@ export const useChatStore = create((set, get) => ({
     }
   },
 
-  // ✉️ send
   sendMessage: async (messageData) => {
     const { selectedUser } = get();
     const { authUser } = useAuthStore.getState();
@@ -138,39 +247,69 @@ export const useChatStore = create((set, get) => ({
         `/messages/send/${selectedUser._id}`,
         messageData
       );
+      invalidateConversationCache(authUser._id, selectedUser._id);
+      invalidateApiCache(`chats:${authUser._id}`);
 
       set((state) => ({
         messages: state.messages
-          .filter((m) => m._id !== tempId)
+          .filter((message) => message._id !== tempId)
           .concat(res.data.newMessage),
+        chatsFetchedAt: 0,
+        conversationSnapshots: {
+          ...state.conversationSnapshots,
+          [getConversationSnapshotKey(authUser._id, selectedUser._id)]: {
+            messages: state.messages
+              .filter((message) => message._id !== tempId)
+              .concat(res.data.newMessage),
+            oldestMessageCursor: state.oldestMessageCursor,
+            hasMoreMessages: state.hasMoreMessages,
+            fetchedAt: Date.now(),
+          },
+        },
       }));
     } catch (error) {
       set((state) => ({
-        messages: state.messages.filter((m) => m._id !== tempId),
+        messages: state.messages.filter((message) => message._id !== tempId),
       }));
       toast.error(error.response?.data?.message || "Something went wrong");
     }
   },
 
-  // 👁️ MARK AS SEEN (RECEIVER SIDE)
-markMessagesAsSeen: async (userId) => {
-  try {
-    await axiosInstance.put(`/messages/seen/${userId}`);
+  markMessagesAsSeen: async (userId) => {
+    try {
+      await axiosInstance.put(`/messages/seen/${userId}`);
+      const authUserId = useAuthStore.getState().authUser?._id;
+      if (authUserId) {
+        invalidateConversationCache(authUserId, userId);
+      }
 
-    set((state) => ({
-      messages: state.messages.map((msg) =>
-        // ONLY update messages sent by the OTHER user
-        msg.senderId === userId && !msg.seenAt
-          ? { ...msg, seenAt: new Date() }
-          : msg
-      ),
-    }));
-  } catch (err) {
-    console.error("Failed to mark messages as seen", err);
-  }
-},
+      set((state) => ({
+        messages: state.messages.map((message) =>
+          message.senderId === userId && !message.seenAt
+            ? { ...message, seenAt: new Date() }
+            : message
+        ),
+        conversationSnapshots: authUserId
+          ? {
+              ...state.conversationSnapshots,
+              [getConversationSnapshotKey(authUserId, userId)]: {
+                messages: state.messages.map((message) =>
+                  message.senderId === userId && !message.seenAt
+                    ? { ...message, seenAt: new Date() }
+                    : message
+                ),
+                oldestMessageCursor: state.oldestMessageCursor,
+                hasMoreMessages: state.hasMoreMessages,
+                fetchedAt: Date.now(),
+              },
+            }
+          : state.conversationSnapshots,
+      }));
+    } catch (error) {
+      console.error("Failed to mark messages as seen", error);
+    }
+  },
 
-  // 🔌 sockets
   subscribeToMessages: () => {
     const { selectedUser, isSoundEnabled } = get();
     if (!selectedUser) return;
@@ -182,12 +321,23 @@ markMessagesAsSeen: async (userId) => {
     socket.off("newMessage");
     socket.off("messagesSeen");
 
-    // 📩 new message
     socket.on("newMessage", (newMessage) => {
       if (String(newMessage.senderId) !== String(selectedUser._id)) return;
+      invalidateConversationCache(authUser._id, selectedUser._id);
+      invalidateApiCache(`chats:${authUser._id}`);
 
       set((state) => ({
         messages: [...state.messages, newMessage],
+        chatsFetchedAt: 0,
+        conversationSnapshots: {
+          ...state.conversationSnapshots,
+          [getConversationSnapshotKey(authUser._id, selectedUser._id)]: {
+            messages: [...state.messages, newMessage],
+            oldestMessageCursor: state.oldestMessageCursor,
+            hasMoreMessages: state.hasMoreMessages,
+            fetchedAt: Date.now(),
+          },
+        },
       }));
 
       if (isSoundEnabled) {
@@ -197,19 +347,39 @@ markMessagesAsSeen: async (userId) => {
       }
     });
 
-    // 👁️ seen event (SENDER SIDE)
     socket.on("messagesSeen", ({ by }) => {
+      invalidateConversationCache(authUser._id, by);
       set((state) => ({
-        messages: state.messages.map((msg) => {
+        messages: state.messages.map((message) => {
           if (
-            msg.senderId === authUser._id &&
-            msg.receiverId === by &&
-            !msg.seenAt
+            message.senderId === authUser._id &&
+            message.receiverId === by &&
+            !message.seenAt
           ) {
-            return { ...msg, seenAt: new Date() };
+            return { ...message, seenAt: new Date() };
           }
-          return msg;
+
+          return message;
         }),
+        conversationSnapshots: {
+          ...state.conversationSnapshots,
+          [getConversationSnapshotKey(authUser._id, by)]: {
+            messages: state.messages.map((message) => {
+              if (
+                message.senderId === authUser._id &&
+                message.receiverId === by &&
+                !message.seenAt
+              ) {
+                return { ...message, seenAt: new Date() };
+              }
+
+              return message;
+            }),
+            oldestMessageCursor: state.oldestMessageCursor,
+            hasMoreMessages: state.hasMoreMessages,
+            fetchedAt: Date.now(),
+          },
+        },
       }));
     });
   },

@@ -43,7 +43,6 @@ export const sendMessage = async (req, res) => {
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
-    // Validation
     if (!text && !image) {
       return res.status(400).json({
         message: "Message text or image is required",
@@ -63,14 +62,12 @@ export const sendMessage = async (req, res) => {
       });
     }
 
-    // Upload image if present
     let imageUrl;
     if (image) {
       const uploadResponse = await cloudinary.uploader.upload(image);
       imageUrl = uploadResponse.secure_url;
     }
 
-    // Save message
     const newMessage = new Message({
       senderId,
       receiverId,
@@ -92,24 +89,21 @@ export const sendMessage = async (req, res) => {
       replyTo: newMessage.replyTo || null,
     };
 
-    // Real-time socket delivery
     const receiverSocketId = getReceiverSocketId(receiverId.toString());
 
     if (receiverSocketId) {
-      // User is ONLINE → deliver via socket
       io.to(receiverSocketId).emit("newMessage", savedMessage);
     } else {
-      // User is OFFLINE → Telegram alert (ADMIN only)
-      const ADMIN_USER_ID = process.env.ADMIN_USER_ID;
+      const adminUserId = process.env.ADMIN_USER_ID;
 
-      if (receiverId.toString() === ADMIN_USER_ID) {
+      if (receiverId.toString() === adminUserId) {
         const senderName =
           req.user?.fullName || req.user?.username || "Unknown";
 
         const telegramText = `
-📩 *New Message*
+New Message
 From: ${senderName}
-${text || "📷 Image"}
+${text || "Image"}
         `.trim();
 
         await sendTelegramMessage(telegramText);
@@ -133,36 +127,31 @@ export const getChatPartners = async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
 
-    // Find all messages where user is either sender or receiver
     const messages = await Message.find({
       $or: [{ senderId: loggedInUserId }, { receiverId: loggedInUserId }],
-    }).sort({ createdAt: -1 }); // sort descending to get last message first
+    }).sort({ createdAt: -1 });
 
-    // Get unique chat partner IDs
     const chatPartnerIds = [
       ...new Set(
-        messages.map((msg) =>
-          msg.senderId.toString() === loggedInUserId.toString()
-            ? msg.receiverId.toString()
-            : msg.senderId.toString()
+        messages.map((message) =>
+          message.senderId.toString() === loggedInUserId.toString()
+            ? message.receiverId.toString()
+            : message.senderId.toString()
         )
       ),
     ];
 
-    // Fetch chat partners from users collection
     const chatPartners = await User.find({
       _id: { $in: chatPartnerIds },
     }).select("-password");
 
-    // Map last message to each partner
     const chatPartnersWithLastMessage = chatPartners.map((partner) => {
-      // find the latest message between logged in user and this partner
       const lastMessage = messages.find(
-        (msg) =>
-          (msg.senderId.toString() === partner._id.toString() &&
-            msg.receiverId.toString() === loggedInUserId.toString()) ||
-          (msg.senderId.toString() === loggedInUserId.toString() &&
-            msg.receiverId.toString() === partner._id.toString())
+        (message) =>
+          (message.senderId.toString() === partner._id.toString() &&
+            message.receiverId.toString() === loggedInUserId.toString()) ||
+          (message.senderId.toString() === loggedInUserId.toString() &&
+            message.receiverId.toString() === partner._id.toString())
       );
 
       return {
@@ -184,32 +173,52 @@ export const getChatPartners = async (req, res) => {
   }
 };
 
-// Fetch messages with pagination (lazy load)
 export const getMessagesByUserIdPaginated = async (req, res) => {
   try {
     const myId = req.user._id;
     const { id: userToChatId } = req.params;
-    const limit = parseInt(req.query.limit) || 50; // number of messages per fetch
-    const offset = parseInt(req.query.offset) || 0; // how many messages to skip
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const { before, beforeId } = req.query;
 
-    // Fetch messages sorted by newest first
-    const messages = await Message.find({
+    const query = {
       $or: [
         { senderId: myId, receiverId: userToChatId },
         { senderId: userToChatId, receiverId: myId },
       ],
-    })
-      .sort({ createdAt: -1 }) // newest first
-      .skip(offset)
+    };
+
+    if (before && beforeId) {
+      const beforeDate = new Date(before);
+
+      if (!Number.isNaN(beforeDate.getTime())) {
+        query.$and = [
+          {
+            $or: [
+              { createdAt: { $lt: beforeDate } },
+              { createdAt: beforeDate, _id: { $lt: beforeId } },
+            ],
+          },
+        ];
+      }
+    }
+
+    const messages = await Message.find(query)
+      .sort({ createdAt: -1, _id: -1 })
       .limit(limit);
 
-    // Reverse to send oldest first for UI rendering
     const messagesReversed = messages.reverse();
+    const oldestMessage = messagesReversed[0] ?? null;
 
     res.status(200).json({
       messages: messagesReversed,
       fetchedCount: messagesReversed.length,
-      hasMore: messagesReversed.length === limit, // indicates if there are more messages
+      hasMore: messages.length === limit,
+      nextCursor: oldestMessage
+        ? {
+            _id: oldestMessage._id,
+            createdAt: oldestMessage.createdAt,
+          }
+        : null,
     });
   } catch (error) {
     console.log("Error in getMessagesByUserIdPaginated:", error);
@@ -219,7 +228,7 @@ export const getMessagesByUserIdPaginated = async (req, res) => {
 
 export const markMessagesAsSeen = async (req, res) => {
   const loggedInUserId = req.user._id;
-  const { userId } = req.params; // chat partner
+  const { userId } = req.params;
 
   await Message.updateMany(
     {
@@ -230,7 +239,6 @@ export const markMessagesAsSeen = async (req, res) => {
     { $set: { seenAt: new Date() } }
   );
 
-  // notify sender in real-time
   const senderSocketId = getReceiverSocketId(userId);
   if (senderSocketId) {
     io.to(senderSocketId).emit("messagesSeen", {
@@ -240,4 +248,3 @@ export const markMessagesAsSeen = async (req, res) => {
 
   res.status(200).json({ success: true });
 };
-

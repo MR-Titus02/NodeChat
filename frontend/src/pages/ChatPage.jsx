@@ -38,7 +38,7 @@ function ChatPage() {
               overflow-hidden
             "
           >
-            <ChatContainer />
+            <ChatContainer key={selectedUser._id} />
           </div>
         ) : (
           <div className="hidden md:flex flex-1 bg-slate-900/50 rounded-2xl">

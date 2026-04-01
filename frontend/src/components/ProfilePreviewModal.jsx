@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { XIcon } from "lucide-react";
 
 function ProfilePreviewModal({ isOpen, onClose, image, name }) {
