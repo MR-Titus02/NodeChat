@@ -18,7 +18,7 @@ function ImageViewer() {
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = "";
     };
-  }, [isOpen]);
+  }, [closeImage, isOpen]);
 
   if (!isOpen || !imageUrl) return null;
 

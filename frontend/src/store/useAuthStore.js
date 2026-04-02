@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { axiosInstance } from "../lib/axios.js";
 import { toast } from "react-hot-toast";
 import { io } from "socket.io-client";
+import { clearApiCache } from "../lib/apiCache.js";
 
 const BASE_URL =
   import.meta.env.MODE === "development" ? "http://localhost:3000" : "/";
@@ -30,6 +31,7 @@ export const useAuthStore = create((set, get) => ({
       console.log("Error in authCheck:", error);
       set({ authUser: null });
       localStorage.removeItem("authUser");
+      clearApiCache();
     } finally {
       set({ isCheckingAuth: false });
     }
@@ -41,7 +43,10 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post("/auth/signup", data);
       const user = res?.data?.user ?? res?.data ?? null;
       set({ authUser: user });
-      if (user) localStorage.setItem("authUser", JSON.stringify(user));
+      if (user) {
+        clearApiCache();
+        localStorage.setItem("authUser", JSON.stringify(user));
+      }
       toast.success("Account created successfully!");
       get().connectSocket();
     } catch (error) {
@@ -57,7 +62,10 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post("/auth/login", data);
       const user = res?.data?.user ?? res?.data ?? null;
       set({ authUser: user });
-      if (user) localStorage.setItem("authUser", JSON.stringify(user));
+      if (user) {
+        clearApiCache();
+        localStorage.setItem("authUser", JSON.stringify(user));
+      }
       toast.success("Logged in successfully");
       get().connectSocket();
     } catch (error) {
@@ -72,6 +80,7 @@ export const useAuthStore = create((set, get) => ({
       await axiosInstance.post("/auth/logout");
       set({ authUser: null });
       localStorage.removeItem("authUser");
+      clearApiCache();
       toast.success("Logged out successfully!");
       get().disconnectSocket();
     } catch (error) {
